@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Airflow</string>
+    <string name="add">New Configuration</string>
+    <string name="export">Export To XML</string>
+    <string name="update">Refresh Widgets</string>
+    <string name="importXML">Import From XML</string>
+    <string name="flow">Send Flow</string>
+    <string name="defport">80</string>
+    <string name="rm">Remove</string>
+    <string name="newC">New…</string>
+    <string name="chtt">Click Here To Test</string>
+    <string name="saqsa">Set As Quick Settings Action</string>
+    <string name="idd">"ID: "</string>
+    <string name="ctvc">Click To View Command</string>
+    <string name="ctvd">Click To View Data</string>
+</resources>
