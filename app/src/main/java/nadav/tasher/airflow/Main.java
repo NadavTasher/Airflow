@@ -22,12 +22,12 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.graphics.drawable.shapes.RoundRectShape;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -75,44 +75,24 @@ public class Main extends Activity {
     static Tunnel<Action> activateTunnel = new Tunnel<>();
     static Tunnel<ArrayList<Configuration>> configurationChangeTunnel = new Tunnel<>();
     static Tunnel<String> widgetTunnel = new Tunnel<>();
+    static Tunnel<Status> statusTunnel = new Tunnel<>();
 
     static {
         bluetoothTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
             @Override
-            public void onReceive(Action action) {
-                BluetoothAdapter blueAdapter;
-                SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
-                Configuration configuration = new Configuration(sp.getString(action.config, ""));
-                BluetoothManager manager = (BluetoothManager) action.c.getSystemService(Context.BLUETOOTH_SERVICE);
-                if (manager != null) {
-                    blueAdapter = manager.getAdapter();
-                    if (blueAdapter.isEnabled()) {
-                        blueAdapter.cancelDiscovery();
-                        if (!configuration.getValue(Configuration.deviceName, "").equals("") && !configuration.getValue(Configuration.deviceAddress, "").equals("")) {
-                            BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.deviceAddress, ""));
-                            UUID uuid = device.getUuids()[0].getUuid();
-                            try {
-                                Toast.makeText(action.c, "Connecting...", Toast.LENGTH_LONG).show();
-                                BluetoothSocket socket = device.createRfcommSocketToServiceRecord(uuid);
-                                socket.connect();
-                                while (!socket.isConnected()) {
-                                    Log.i("Connecting", "...");
-                                }
-                                Toast.makeText(action.c, "Connected.", Toast.LENGTH_LONG).show();
-                                Toast.makeText(action.c, "Sending Data...", Toast.LENGTH_LONG).show();
-                                socket.getOutputStream().write(configuration.getValue(Configuration.data, "").getBytes());
-                                socket.getOutputStream().flush();
-                                socket.getOutputStream().close();
-                                socket.close();
-                                Toast.makeText(action.c, "Sent Data.", Toast.LENGTH_LONG).show();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+            public void onReceive(final Action action) {
+                BluetoothSession session = new BluetoothSession(action, new BluetoothSession.OnSessionEnd() {
+                    @Override
+                    public void onSessionEnd(Status result) {
+                        statusTunnel.send(result);
+                        if (result.status == Status.STATUS_SUCCEDED) {
+                            Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
                         }
-                    } else {
-                        Toast.makeText(action.c, "Turn On Bluetooth", Toast.LENGTH_SHORT).show();
                     }
-                }
+                });
+                session.execute();
             }
         });
         internetTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
@@ -346,7 +326,13 @@ public class Main extends Activity {
 
     private void addToListView(Configuration c) {
         ConfigurationView cv = new ConfigurationView(getApplicationContext(), c);
-        cv.setLayoutParams(new LinearLayout.LayoutParams(Device.screenX(getApplicationContext()) - scrollable.getPaddingRight() - scrollable.getPaddingLeft(), Device.screenY(getApplicationContext()) / 4));
+        cv.setOnEdit(new ConfigurationView.OnEdit() {
+            @Override
+            public void onEdit(String conf) {
+                editConfiguration(conf);
+            }
+        });
+        cv.setLayoutParams(new LinearLayout.LayoutParams(Device.screenX(getApplicationContext()) - scrollable.getPaddingRight() - scrollable.getPaddingLeft(), Device.screenY(getApplicationContext()) / 2));
         scrollable.addView(cv, 1);
     }
 
@@ -450,10 +436,34 @@ public class Main extends Activity {
             }
         });
         all.addView(getText("Title:"));
+        titleText.setText(configuration.getValue(Configuration.title, ""));
         all.addView(titleText);
         if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_BLUETOOTH) {
-            EditText bluetoothDataText = new EditText(this);
+            final EditText bluetoothDataText = new EditText(this);
             bluetoothDataText.setHint("String To Send Over Bluetooth");
+            bluetoothDataText.setText(configuration.getValue(Configuration.data, ""));
+            bluetoothDataText.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(final CharSequence s, int start, int before, int count) {
+                    final Handler handler = new Handler();
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (s.toString().equals(bluetoothDataText.getText().toString())) {
+                                configuration.setValue(Configuration.data, s.toString());
+                            }
+                        }
+                    }, 100);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            });
             all.addView(getText("Data:"));
             all.addView(bluetoothDataText);
             final TextView uuidText = getText("(Device Address)");
@@ -463,7 +473,7 @@ public class Main extends Activity {
             all.addView(uuidText);
             ArrayList<BluetoothDevice> pairedDevices = new ArrayList<>(Arrays.asList(bluetoothAdapter.getBondedDevices().toArray(new BluetoothDevice[bluetoothAdapter.getBondedDevices().size()])));
             for (int p = 0; p < pairedDevices.size(); p++) {
-                RadioButton device = new RadioButton(getApplicationContext());
+                final RadioButton device = new RadioButton(getApplicationContext());
                 final String devName = pairedDevices.get(p).getName();
                 final String devAddress = pairedDevices.get(p).getAddress();
                 device.setText(devName);
@@ -473,14 +483,19 @@ public class Main extends Activity {
                 device.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                     @Override
                     public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                        configuration.setValue(Configuration.deviceName, devName);
-                        configuration.setValue(Configuration.deviceAddress, devAddress);
-                        String addressWithName = "(" + devAddress + ")";
-                        uuidText.setText(addressWithName);
+                        if (isChecked) {
+                            configuration.setValue(Configuration.deviceName, devName);
+                            configuration.setValue(Configuration.deviceAddress, devAddress);
+                            String addressWithName = "(" + devAddress + ")";
+                            uuidText.setText(addressWithName);
+                        }
                     }
                 });
                 deviceName.addView(device);
-                if (p == 0) {
+                if (p == 0 && configuration.getValue(Configuration.deviceName, null) == null) {
+                    device.toggle();
+                }
+                if (devName.equals(configuration.getValue(Configuration.deviceName, ""))) {
                     device.toggle();
                 }
             }
@@ -823,6 +838,25 @@ public class Main extends Activity {
     //        alert.show();
     //    }
 
+    static class Status {
+        static final int STATUS_STARTING = 0;
+        static final int STATUS_IN_PROGRESS = 1;
+        static final int STATUS_SUCCEDED = 2;
+        static final int STATUS_FAILED = 3;
+        static final int STATUS_IDLE = -1;
+        int status;
+        Configuration c = null;
+
+        public Status(int whatsOn) {
+            status = whatsOn;
+        }
+
+        public Status(int whatsOn, Configuration c) {
+            status = whatsOn;
+            this.c = c;
+        }
+    }
+
     static class Action {
         Context c;
         String config;
@@ -932,6 +966,7 @@ public class Main extends Activity {
 
         Configuration configuration;
         LinearLayout left, right;
+        OnEdit onEdit = null;
 
         public ConfigurationView(Context cont, Configuration c) {
             super(cont);
@@ -947,7 +982,7 @@ public class Main extends Activity {
                             break;
                         }
                     }
-                    if (oldConfiguration != configuration) {
+                    if (!oldConfiguration.getConfiguration().equals(configuration.getConfiguration())) {
                         initStageA();
                     }
                 }
@@ -1033,6 +1068,13 @@ public class Main extends Activity {
                     Main.activateTunnel.send(new Action(getContext(), configuration.getValue(Configuration.name, null)));
                 }
             });
+            edit.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (onEdit != null)
+                        onEdit.onEdit(configuration.getValue(Configuration.name, null));
+                }
+            });
             left.setPadding(20, 0, 0, 0);
             right.setPadding(0, 0, 20, 0);
             addView(left);
@@ -1043,6 +1085,10 @@ public class Main extends Activity {
             } else {
                 initStageDInternet();
             }
+        }
+
+        public void setOnEdit(OnEdit onEdit) {
+            this.onEdit = onEdit;
         }
 
         private void initStageDBluetooth() {
@@ -1057,6 +1103,10 @@ public class Main extends Activity {
                 gd.setColor(color);
             }
             return gd;
+        }
+
+        public interface OnEdit {
+            void onEdit(String conf);
         }
 
         static class ColorPicker extends LinearLayout {
@@ -1188,6 +1238,76 @@ public class Main extends Activity {
             public interface OnColorChanged {
                 void onColorChange(int color);
             }
+        }
+    }
+
+    static class BluetoothSession extends AsyncTask<String, Status, Status> {
+        private Action action;
+        private OnSessionEnd onSessionEnd;
+
+        public BluetoothSession(Action action, OnSessionEnd onSessionEnd) {
+            this.action = action;
+            this.onSessionEnd = onSessionEnd;
+        }
+
+        @Override
+        protected final Main.Status doInBackground(String... configurations) {
+            Main.Status returnStatus = new Main.Status(Main.Status.STATUS_STARTING);
+            BluetoothAdapter blueAdapter;
+            BluetoothManager manager = (BluetoothManager) action.c.getSystemService(Context.BLUETOOTH_SERVICE);
+            SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
+            Configuration configuration = new Configuration(sp.getString(action.config, "{}"));
+            if (manager != null) {
+                blueAdapter = manager.getAdapter();
+                if (blueAdapter.isEnabled()) {
+                    blueAdapter.cancelDiscovery();
+                    if (!configuration.getValue(Configuration.deviceName, "").equals("") && !configuration.getValue(Configuration.deviceAddress, "").equals("")) {
+                        final BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.deviceAddress, ""));
+                        final Main.Status runStatus = new Main.Status(Main.Status.STATUS_STARTING);
+                        UUID uuid = device.getUuids()[0].getUuid();
+                        try {
+                            final BluetoothSocket socket = device.createRfcommSocketToServiceRecord(uuid);
+                            runStatus.status = Main.Status.STATUS_IN_PROGRESS;
+                            try {
+                                socket.connect();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                runStatus.status = Main.Status.STATUS_FAILED;
+                            }
+                            while (!socket.isConnected())
+                                runStatus.status = Main.Status.STATUS_IN_PROGRESS;
+
+                            if (socket.isConnected()) {
+                                socket.getOutputStream().write(configuration.getValue(Configuration.data, "").getBytes());
+                                try {
+                                    socket.getOutputStream().flush();
+                                    socket.getOutputStream().close();
+                                    socket.close();
+                                }catch(IOException ignored){}
+                                runStatus.status = Main.Status.STATUS_SUCCEDED;
+                            } else {
+                                runStatus.status = Main.Status.STATUS_FAILED;
+                            }
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                            runStatus.status = Main.Status.STATUS_FAILED;
+                        }
+                    }
+                } else {
+                    returnStatus.status = Main.Status.STATUS_FAILED;
+                }
+            }
+            return returnStatus;
+        }
+
+        @Override
+        protected void onPostExecute(Main.Status status) {
+            super.onPostExecute(status);
+            if (onSessionEnd != null) onSessionEnd.onSessionEnd(status);
+        }
+
+        public interface OnSessionEnd {
+            void onSessionEnd(Main.Status result);
         }
     }
 }
