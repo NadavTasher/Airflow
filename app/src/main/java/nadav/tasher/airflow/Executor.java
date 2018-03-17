@@ -19,7 +19,4 @@ public class Executor extends Activity {
 		Main.widgetTunnel.send("A Widget Was Pressed.");
 		finish();
 	}
-	public Executor(String confName){
-		configuration=confName;
-	}
 }

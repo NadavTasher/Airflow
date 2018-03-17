@@ -16,19 +16,33 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.ShapeDrawable;
+import android.graphics.drawable.shapes.RoundRectShape;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,16 +52,30 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.UUID;
 
+import nadav.tasher.lightool.Device;
 import nadav.tasher.lightool.Graphics;
 import nadav.tasher.lightool.Tunnel;
 
 public class Main extends Activity {
+    static final String qs = "qs";
+    static final String shortcut = "short";
+    static final String bluetooth = "bluetooth";
+    static final String internet = "internet";
+    static final String configuration = "requestedConfig";
+    static final String widgets = "widget_list";
+    static final String widget = "widget_";
+    static final int color = 0xff568ff1;
+    static final int coasterColor = 0xff2245dd;
+    static final int textSize = 23;
     static Tunnel<Action> bluetoothTunnel = new Tunnel<>();
     static Tunnel<Action> internetTunnel = new Tunnel<>();
     static Tunnel<Action> activateTunnel = new Tunnel<>();
+    static Tunnel<ArrayList<Configuration>> configurationChangeTunnel = new Tunnel<>();
     static Tunnel<String> widgetTunnel = new Tunnel<>();
+
     static {
         bluetoothTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
             @Override
@@ -60,8 +88,8 @@ public class Main extends Activity {
                     blueAdapter = manager.getAdapter();
                     if (blueAdapter.isEnabled()) {
                         blueAdapter.cancelDiscovery();
-                        if (!configuration.getValue(Configuration.deviceName, "").equals("") && !configuration.getValue(Configuration.uuid, "").equals("")) {
-                            BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.uuid, ""));
+                        if (!configuration.getValue(Configuration.deviceName, "").equals("") && !configuration.getValue(Configuration.deviceAddress, "").equals("")) {
+                            BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.deviceAddress, ""));
                             UUID uuid = device.getUuids()[0].getUuid();
                             try {
                                 Toast.makeText(action.c, "Connecting...", Toast.LENGTH_LONG).show();
@@ -90,18 +118,17 @@ public class Main extends Activity {
         internetTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
             @Override
             public void onReceive(Action action) {
-
             }
         });
         activateTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
             @Override
             public void onReceive(Action action) {
                 SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
-                Configuration configuration=new Configuration(sp.getString(action.config,"{}"));
-                if(configuration.getValue(Configuration.type,-1)!=-1){
-                    if(configuration.getValue(Configuration.type,Configuration.TYPE_BLUETOOTH)==Configuration.TYPE_BLUETOOTH){
+                Configuration configuration = new Configuration(sp.getString(action.config, "{}"));
+                if (configuration.getValue(Configuration.type, -1) != -1) {
+                    if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_BLUETOOTH) {
                         bluetoothTunnel.send(action);
-                    }else{
+                    } else {
                         internetTunnel.send(action);
                     }
                 }
@@ -109,18 +136,86 @@ public class Main extends Activity {
         });
     }
 
-    static final String qs="qs";
-    static final String shortcut="short";
-    static final String bluetooth="bluetooth";
-    static final String internet="internet";
-    static final String configuration="requestedConfig";
-    static final String widgets="widget_list";
-    static final String widget="widget_";
-
-    static final int color = 0xff568ff1;
-
     private FrameLayout masterLayout;
     private LinearLayout scrollable;
+    private BluetoothManager manager;
+    private BluetoothAdapter bluetoothAdapter;
+
+    static void addConfigurationToList(Context c, int type, String name) {
+        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
+        if (type == Configuration.TYPE_BLUETOOTH) {
+            try {
+                JSONArray array = new JSONArray(sp.getString(bluetooth, "[]"));
+                array.put(name);
+                sp.edit().putString(bluetooth, array.toString()).apply();
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        } else {
+            try {
+                JSONArray array = new JSONArray(sp.getString(internet, "[]"));
+                array.put(name);
+                sp.edit().putString(internet, array.toString()).apply();
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    static ArrayList<String> getConfigurationsFromList(Context c, int type) {
+        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
+        ArrayList<String> configs = new ArrayList<>();
+        JSONArray array;
+        if (type == Configuration.TYPE_BLUETOOTH) {
+            try {
+                array = new JSONArray(sp.getString(bluetooth, "[]"));
+            } catch (JSONException e) {
+                e.printStackTrace();
+                array = new JSONArray();
+            }
+        } else {
+            try {
+                array = new JSONArray(sp.getString(internet, "[]"));
+            } catch (JSONException e) {
+                e.printStackTrace();
+                array = new JSONArray();
+            }
+        }
+        for (int av = 0; av < array.length(); av++) {
+            try {
+                configs.add(String.valueOf(array.get(av)));
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+        return configs;
+    }
+
+    static void setWidgetConfiguration(Context c, int widgetID, String configuration) {
+        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
+        try {
+            JSONObject widgetList = new JSONObject(sp.getString(widgets, "{}"));
+            widgetList.put(widget + widgetID, configuration);
+            sp.edit().putString(widgets, widgetList.toString()).apply();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    static String getWidgetConfiguration(Context c, int widgetID) {
+        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
+        try {
+            JSONObject widgetList = new JSONObject(sp.getString(widgets, "{}"));
+            if (widgetList.has(widget + widgetID)) {
+                return widgetList.getString(widget + widgetID);
+            } else {
+                return null;
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -133,80 +228,6 @@ public class Main extends Activity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         initStageAB();
-    }
-
-    private void initStageAB() {
-        if (Build.VERSION.SDK_INT >= 23) {
-            int permissionCheck = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                initStageB();
-            } else {
-                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 304);
-            }
-        } else {
-            initStageB();
-        }
-    }
-
-    private void remakeTaskDescription() {
-        Bitmap ico = BitmapFactory.decodeResource(getResources(), R.drawable.ic_launcher);
-        ActivityManager.TaskDescription taskDescription = new ActivityManager.TaskDescription(getString(R.string.app_name), ico, color);
-        setTaskDescription(taskDescription);
-    }
-
-    private void initStageB() {
-        masterLayout = new FrameLayout(this);
-        Graphics.DragNavigation dragNavigation = new Graphics.DragNavigation(getApplicationContext(), getDrawable(R.drawable.ic_launcher), 0x80333333);
-        getWindow().setStatusBarColor(dragNavigation.calculateOverlayedColor(Values.color));
-        masterLayout.setBackgroundColor(Values.color);
-        scrollable = new LinearLayout(this);
-        scrollable.setOrientation(LinearLayout.VERTICAL);
-        scrollable.setGravity(Gravity.CENTER);
-        scrollable.addView(new View(this), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dragNavigation.spacerSize()));
-        ScrollView sv = new ScrollView(this);
-        sv.addView(scrollable);
-        masterLayout.addView(sv);
-        masterLayout.addView(dragNavigation);
-        LinearLayout actionsView = new LinearLayout(this);
-        actionsView.setOrientation(LinearLayout.VERTICAL);
-        actionsView.setGravity(Gravity.CENTER);
-        Button buttonNewConfig = new Button(this);
-        Button buttonChooseQS = new Button(this);
-        Button buttonChooseLP = new Button(this);
-        Button buttonImportExport = new Button(this);
-        buttonNewConfig.setBackground(getDrawable(R.drawable.rounded_rect));
-        buttonChooseQS.setBackground(getDrawable(R.drawable.rounded_rect));
-        buttonChooseLP.setBackground(getDrawable(R.drawable.rounded_rect));
-        buttonImportExport.setBackground(getDrawable(R.drawable.rounded_rect));
-        buttonNewConfig.setText("New Configuration");
-        buttonChooseQS.setText("Choose QuickSettings Configuration");
-        buttonChooseLP.setText("Choose Shortcut Configuration");
-        buttonImportExport.setText("Import/Export");
-        actionsView.addView(buttonNewConfig);
-        actionsView.addView(buttonChooseQS);
-        actionsView.addView(buttonChooseLP);
-        actionsView.addView(buttonImportExport);
-        dragNavigation.setContent(actionsView);
-        setContentView(masterLayout);
-        remakeTaskDescription();
-    }
-
-    static class Values {
-        static final int color = 0xff568ff1;
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
-        switch (requestCode) {
-            case 304: {
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    initStageB();
-                } else {
-                    initStageAB();
-                }
-                break;
-            }
-        }
     }
     //    void createShortcut(String widget) {
     //        if (Build.VERSION.SDK_INT >= 25) {
@@ -235,108 +256,167 @@ public class Main extends Activity {
     //        }
     //    }
 
-    void createConfiguration() {
+    private void initStageAB() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            int permissionCheck = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+                initStageB();
+            } else {
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 304);
+            }
+        } else {
+            initStageB();
+        }
+    }
+
+    private void remakeTaskDescription() {
+        Bitmap ico = BitmapFactory.decodeResource(getResources(), R.drawable.ic_launcher);
+        ActivityManager.TaskDescription taskDescription = new ActivityManager.TaskDescription(getString(R.string.app_name), ico, color);
+        setTaskDescription(taskDescription);
+    }
+
+    private void initStageB() {
+        manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        if (manager != null)
+            bluetoothAdapter = manager.getAdapter();
+        masterLayout = new FrameLayout(this);
+        Graphics.DragNavigation dragNavigation = new Graphics.DragNavigation(getApplicationContext(), getDrawable(R.drawable.ic_launcher), 0x80333333);
+        getWindow().setStatusBarColor(dragNavigation.calculateOverlayedColor(color));
+        getWindow().setNavigationBarColor(color);
+        masterLayout.setBackgroundColor(color);
+        scrollable = new LinearLayout(this);
+        scrollable.setOrientation(LinearLayout.VERTICAL);
+        scrollable.setGravity(Gravity.CENTER);
+        scrollable.setPadding(15, 15, 15, 15);
+        scrollable.addView(new View(this), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dragNavigation.spacerSize()));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(scrollable);
+        masterLayout.addView(sv);
+        masterLayout.addView(dragNavigation);
+        LinearLayout actionsView = new LinearLayout(this);
+        actionsView.setOrientation(LinearLayout.VERTICAL);
+        actionsView.setGravity(Gravity.CENTER);
+        Button buttonNewConfig = new Button(this);
+        Button buttonChooseQS = new Button(this);
+        Button buttonChooseLP = new Button(this);
+        Button buttonImportExport = new Button(this);
+        buttonNewConfig.setBackground(null);
+        buttonChooseQS.setBackground(null);
+        buttonChooseLP.setBackground(null);
+        buttonImportExport.setBackground(null);
+        buttonNewConfig.setText("New Configuration");
+        buttonChooseQS.setText("Choose QuickSettings");
+        buttonChooseLP.setText("Choose Shortcut");
+        buttonImportExport.setText("Import/Export");
+        actionsView.addView(buttonNewConfig);
+        actionsView.addView(buttonChooseQS);
+        actionsView.addView(buttonChooseLP);
+        actionsView.addView(buttonImportExport);
+        buttonNewConfig.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                createConfiguration("");
+            }
+        });
+        dragNavigation.setContent(actionsView);
+        final ArrayList<String> confs = new ArrayList<>();
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_INTERNET));
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));
+        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        for (int c = 0; c < confs.size(); c++) {
+            addToListView(new Configuration(sp.getString(confs.get(c), "{}")));
+        }
+        setContentView(masterLayout);
+        remakeTaskDescription();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case 304: {
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    initStageB();
+                } else {
+                    initStageAB();
+                }
+                break;
+            }
+        }
+    }
+
+    private void addToListView(Configuration c) {
+        ConfigurationView cv = new ConfigurationView(getApplicationContext(), c);
+        cv.setLayoutParams(new LinearLayout.LayoutParams(Device.screenX(getApplicationContext()) - scrollable.getPaddingRight() - scrollable.getPaddingLeft(), Device.screenY(getApplicationContext()) / 4));
+        scrollable.addView(cv, 1);
+    }
+
+    private void createConfiguration(String name) {
+        final ArrayList<String> confs = new ArrayList<>();
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_INTERNET));
         final Configuration configuration = new Configuration();
         AlertDialog.Builder alert = new AlertDialog.Builder(this);
         alert.setTitle("New Configuration");
         final EditText nameText = new EditText(this);
-        alert.setView(nameText);
+        FrameLayout fl = new FrameLayout(this);
+        nameText.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        nameText.setText(name);
+        fl.addView(nameText);
+        fl.setPadding(15, 15, 15, 15);
+        alert.setView(fl);
         alert.setPositiveButton("Bluetooth", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
-                configuration.setValue(Configuration.type, Configuration.TYPE_BLUETOOTH);
-                sp.edit().putString(nameText.getText().toString(), configuration.getConfiguration()).apply();
-                addConfigurationToList(getApplicationContext(),Configuration.TYPE_BLUETOOTH,nameText.getText().toString());
-                editConfiguration(nameText.getText().toString());
+                if (bluetoothAdapter.isEnabled()) {
+                    if (nameText.getText().toString().length() != 0) {
+                        if (!confs.contains(nameText.getText().toString())) {
+                            SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+                            configuration.setValue(Configuration.type, Configuration.TYPE_BLUETOOTH);
+                            configuration.setValue(Configuration.name, nameText.getText().toString());
+                            sp.edit().putString(nameText.getText().toString(), configuration.getConfiguration()).apply();
+                            addConfigurationToList(getApplicationContext(), Configuration.TYPE_BLUETOOTH, nameText.getText().toString());
+                            addToListView(configuration);
+                            editConfiguration(nameText.getText().toString());
+                        } else {
+                            Toast.makeText(getApplicationContext(), "Cannot Create Configuration;\nA Configuration Named \"" + nameText.getText().toString() + "\" Is Already Available.", Toast.LENGTH_LONG).show();
+                            createConfiguration("");
+                        }
+                    } else {
+                        Toast.makeText(getApplicationContext(), "Cannot Create Configuration With An Empty Name!", Toast.LENGTH_LONG).show();
+                        createConfiguration("");
+                    }
+                } else {
+                    Toast.makeText(getApplicationContext(), "Turn On Bluetooth In Order To Create A Bluetooth Configuration.", Toast.LENGTH_LONG).show();
+                    createConfiguration(nameText.getText().toString());
+                }
             }
         });
         alert.setNegativeButton("Internet", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
-                configuration.setValue(Configuration.type, Configuration.TYPE_INTERNET);
-                sp.edit().putString(nameText.getText().toString(), configuration.getConfiguration()).apply();
-                addConfigurationToList(getApplicationContext(),Configuration.TYPE_INTERNET,nameText.getText().toString());
-                editConfiguration(nameText.getText().toString());
+                if (nameText.getText().toString().length() != 0) {
+                    if (!confs.contains(nameText.getText().toString())) {
+                        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+                        configuration.setValue(Configuration.type, Configuration.TYPE_INTERNET);
+                        configuration.setValue(Configuration.name, nameText.getText().toString());
+                        sp.edit().putString(nameText.getText().toString(), configuration.getConfiguration()).apply();
+                        addConfigurationToList(getApplicationContext(), Configuration.TYPE_INTERNET, nameText.getText().toString());
+                        addToListView(configuration);
+                        editConfiguration(nameText.getText().toString());
+                    } else {
+                        Toast.makeText(getApplicationContext(), "Cannot Create Configuration;\nA Configuration Named \"" + nameText.getText().toString() + "\" Is Already Available.", Toast.LENGTH_LONG).show();
+                        createConfiguration("");
+                    }
+                } else {
+                    Toast.makeText(getApplicationContext(), "Cannot Create Configuration With An Empty Name!", Toast.LENGTH_LONG).show();
+                    createConfiguration("");
+                }
             }
         });
         alert.show();
     }
 
-    static void addConfigurationToList(Context c,int type,String name){
-        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
-        if(type==Configuration.TYPE_BLUETOOTH){
-            try {
-                JSONArray array=new JSONArray(sp.getString(bluetooth,"[]"));
-                array.put(name);
-                sp.edit().putString(bluetooth,array.toString()).apply();
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }else{
-            try {
-                JSONArray array=new JSONArray(sp.getString(internet,"[]"));
-                array.put(name);
-                sp.edit().putString(internet,array.toString()).apply();
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    static ArrayList<String> getConfigurationsFromList(Context c,int type){
-        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
-        ArrayList<String> configs=new ArrayList<>();
-        JSONArray array;
-        if(type==Configuration.TYPE_BLUETOOTH){
-            try {
-                array=new JSONArray(sp.getString(bluetooth,"[]"));
-            } catch (JSONException e) {
-                e.printStackTrace();
-                array=new JSONArray();
-            }
-        }else{
-            try {
-                array=new JSONArray(sp.getString(internet,"[]"));
-            } catch (JSONException e) {
-                e.printStackTrace();
-                array=new JSONArray();
-            }
-        }
-        for(int av=0;av<array.length();av++){
-            try {
-                configs.add(String.valueOf(array.get(av)));
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }
-        return configs;
-    }
-
-    static void setWidgetConfiguration(Context c,int widgetID,String configuration){
-        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
-        try {
-            JSONObject widgetList=new JSONObject(sp.getString(widgets,"{}"));
-            widgetList.put(widget+widgetID,configuration);
-            sp.edit().putString(widgets,widgetList.toString());
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-    }
-
-    static String getWidgetConfiguration(Context c,int widgetID){
-        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
-        try {
-            JSONObject widgetList=new JSONObject(sp.getString(widgets,"{}"));
-            return widgetList.getString(widget+widgetID);
-        } catch (JSONException e) {
-            e.printStackTrace();
-            return "";
-        }
-    }
-
-    void editConfiguration(final String name) {
+    private void editConfiguration(final String name) {
         SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
         final Configuration configuration = new Configuration(sp.getString(name, ""));
         AlertDialog.Builder alert = new AlertDialog.Builder(this);
@@ -344,32 +424,125 @@ public class Main extends Activity {
         LinearLayout all = new LinearLayout(this);
         all.setOrientation(LinearLayout.VERTICAL);
         all.setGravity(Gravity.CENTER);
+        all.setPadding(0, 0, 0, 0);
         final EditText titleText = new EditText(this);
         titleText.setHint("Configuration's Title");
+        titleText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(final CharSequence s, int start, int before, int count) {
+                final Handler handler = new Handler();
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (s.toString().equals(titleText.getText().toString())) {
+                            configuration.setValue(Configuration.title, s.toString());
+                        }
+                    }
+                }, 100);
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+        all.addView(getText("Title:"));
         all.addView(titleText);
-        EditText bluetoothDataText = new EditText(this);
-        bluetoothDataText.setHint("String To Send Over Bluetooth");
-        all.addView(bluetoothDataText);
-        EditText uuidText = new EditText(this);
-        RadioGroup deviceName = new RadioGroup(this);
-        EditText urlText = new EditText(this);
-        EditText portText = new EditText(this);
-        EditText fileText = new EditText(this);
+        if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_BLUETOOTH) {
+            EditText bluetoothDataText = new EditText(this);
+            bluetoothDataText.setHint("String To Send Over Bluetooth");
+            all.addView(getText("Data:"));
+            all.addView(bluetoothDataText);
+            final TextView uuidText = getText("(Device Address)");
+            RadioGroup deviceName = new RadioGroup(this);
+            all.addView(getText("Select Device:"));
+            all.addView(deviceName);
+            all.addView(uuidText);
+            ArrayList<BluetoothDevice> pairedDevices = new ArrayList<>(Arrays.asList(bluetoothAdapter.getBondedDevices().toArray(new BluetoothDevice[bluetoothAdapter.getBondedDevices().size()])));
+            for (int p = 0; p < pairedDevices.size(); p++) {
+                RadioButton device = new RadioButton(getApplicationContext());
+                final String devName = pairedDevices.get(p).getName();
+                final String devAddress = pairedDevices.get(p).getAddress();
+                device.setText(devName);
+                device.setTextColor(Color.WHITE);
+                device.setTextSize(textSize);
+                device.setGravity(Gravity.CENTER);
+                device.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        configuration.setValue(Configuration.deviceName, devName);
+                        configuration.setValue(Configuration.deviceAddress, devAddress);
+                        String addressWithName = "(" + devAddress + ")";
+                        uuidText.setText(addressWithName);
+                    }
+                });
+                deviceName.addView(device);
+                if (p == 0) {
+                    device.toggle();
+                }
+            }
+        } else {
+            EditText urlText = new EditText(this);
+            EditText portText = new EditText(this);
+            EditText fileText = new EditText(this);
+        }
+        all.addView(getText("Text Color:"));
+        ConfigurationView.ColorPicker textColorPicker = new ConfigurationView.ColorPicker(this, configuration.getValue(Configuration.textColor, 0xff000000));
+        textColorPicker.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Device.screenY(getApplication()) / 4));
+        textColorPicker.setOnColorChanged(new ConfigurationView.ColorPicker.OnColorChanged() {
+            @Override
+            public void onColorChange(int color) {
+                configuration.setValue(Configuration.textColor, color);
+            }
+        });
+        all.addView(textColorPicker);
+        all.addView(getText("Background Color:"));
+        ConfigurationView.ColorPicker backgroundColorPicker = new ConfigurationView.ColorPicker(this, configuration.getValue(Configuration.backgroundColor, coasterColor));
+        backgroundColorPicker.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Device.screenY(getApplication()) / 4));
+        backgroundColorPicker.setOnColorChanged(new ConfigurationView.ColorPicker.OnColorChanged() {
+            @Override
+            public void onColorChange(int color) {
+                configuration.setValue(Configuration.backgroundColor, color);
+            }
+        });
+        all.addView(backgroundColorPicker);
         alert.setPositiveButton("Save", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
                 sp.edit().putString(name, configuration.getConfiguration()).apply();
+                Main.configurationChangeTunnel.send(generateConfigurations());
             }
         });
+        ScrollView sv = new ScrollView(this);
+        sv.addView(all);
+        sv.setPadding(10, 10, 10, 10);
+        alert.setView(sv);
         alert.show();
     }
 
     TextView getText(String te) {
         TextView t = new TextView(this);
         t.setText(te);
+        t.setTextSize(textSize);
+        t.setGravity(Gravity.CENTER);
         t.setTextColor(Color.WHITE);
         return t;
+    }
+
+    ArrayList<Configuration> generateConfigurations() {
+        ArrayList<Configuration> allConfs = new ArrayList<>();
+        final ArrayList<String> confs = new ArrayList<>();
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_INTERNET));
+        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        for (int c = 0; c < confs.size(); c++) {
+            allConfs.add(new Configuration(sp.getString(confs.get(c), "{}")));
+        }
+        return allConfs;
     }
     //    void newBlueConfig() {
     //        selected_name = null;
@@ -668,11 +841,12 @@ public class Main extends Activity {
         static final String title = "title";
         static final String port = "internet_port";
         static final String data = "bluetooth_string";
-        static final String uuid = "bluetooth_uuid";
+        static final String deviceAddress = "bluetooth_uuid";
         static final String backgroundColor = "back_color";
         static final String textColor = "text_color";
         static final String file = "internet_file";
         static final String count = "uses";
+        static final String name = "name";
         static final String deviceName = "bluetooth_device_name";
         JSONObject config = null;
 
@@ -750,6 +924,269 @@ public class Main extends Activity {
                 }
             } else {
                 return defval;
+            }
+        }
+    }
+
+    static class ConfigurationView extends LinearLayout {
+
+        Configuration configuration;
+        LinearLayout left, right;
+
+        public ConfigurationView(Context cont, Configuration c) {
+            super(cont);
+            configuration = c;
+            initStageA();
+            Main.configurationChangeTunnel.addReceiver(new Tunnel.OnTunnel<ArrayList<Configuration>>() {
+                @Override
+                public void onReceive(ArrayList<Configuration> configurations) {
+                    Configuration oldConfiguration = configuration;
+                    for (int c = 0; c < configurations.size(); c++) {
+                        if (configurations.get(c).getValue(Configuration.name, null).equals(configuration.getValue(Configuration.name, null))) {
+                            configuration = configurations.get(c);
+                            break;
+                        }
+                    }
+                    if (oldConfiguration != configuration) {
+                        initStageA();
+                    }
+                }
+            });
+        }
+
+        @Override
+        public void setLayoutParams(ViewGroup.LayoutParams params) {
+            super.setLayoutParams(params);
+            reside(params);
+        }
+
+        private void reside(ViewGroup.LayoutParams params) {
+            if (left != null && right != null && params != null) {
+                LinearLayout.LayoutParams lp = new LayoutParams(params.width / 2, ViewGroup.LayoutParams.MATCH_PARENT);
+                left.setLayoutParams(lp);
+                right.setLayoutParams(lp);
+            }
+        }
+
+        private void initStageA() {
+            setOrientation(HORIZONTAL);
+            setGravity(Gravity.CENTER);
+            setBackground(generateCoaster(configuration.getValue(Configuration.backgroundColor, Main.coasterColor)));
+            setPadding(10, 10, 10, 10);
+            initStageB();
+        }
+
+        private void initStageB() {
+            removeAllViews();
+            initStageC();
+        }
+
+        private void initStageC() {
+            left = new LinearLayout(getContext());
+            right = new LinearLayout(getContext());
+            left.setOrientation(LinearLayout.VERTICAL);
+            right.setOrientation(LinearLayout.VERTICAL);
+            left.setGravity(Gravity.CENTER);
+            right.setGravity(Gravity.CENTER);
+            TextView title = new TextView(getContext());
+            title.setGravity(Gravity.CENTER);
+            title.setTextSize(25);
+            title.setText(configuration.getValue(Configuration.title, "No Title"));
+            title.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            TextView name = new TextView(getContext());
+            name.setGravity(Gravity.CENTER);
+            name.setTextSize(20);
+            name.setText(configuration.getValue(Configuration.name, "No Name!"));
+            name.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            left.addView(title);
+            left.addView(name);
+            LinearLayout bottomButtons = new LinearLayout(getContext());
+            bottomButtons.setGravity(Gravity.CENTER);
+            bottomButtons.setOrientation(LinearLayout.HORIZONTAL);
+            ImageButton share, edit, flow;
+            share = new ImageButton(getContext());
+            edit = new ImageButton(getContext());
+            flow = new ImageButton(getContext());
+            share.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            edit.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            flow.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            int size = Device.screenY(getContext()) / 11;
+            LinearLayout.LayoutParams buttons = new LayoutParams(size, size);
+            share.setBackground(null);
+            edit.setBackground(null);
+            flow.setBackground(null);
+            share.setImageDrawable(getContext().getDrawable(R.drawable.ic_share));
+            edit.setImageDrawable(getContext().getDrawable(R.drawable.ic_create));
+            flow.setImageDrawable(getContext().getDrawable(R.drawable.ic_run));
+            share.setLayoutParams(buttons);
+            edit.setLayoutParams(buttons);
+            flow.setLayoutParams(buttons);
+            bottomButtons.addView(edit);
+            bottomButtons.addView(share);
+            bottomButtons.addView(flow);
+            bottomButtons.setPadding(5, 5, 5, 5);
+            bottomButtons.setBackground(generateCoaster(configuration.getValue(Configuration.textColor, 0xff000000)));
+            left.addView(bottomButtons);
+            flow.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Main.activateTunnel.send(new Action(getContext(), configuration.getValue(Configuration.name, null)));
+                }
+            });
+            left.setPadding(20, 0, 0, 0);
+            right.setPadding(0, 0, 20, 0);
+            addView(left);
+            addView(right);
+            reside(getLayoutParams());
+            if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_BLUETOOTH) {
+                initStageDBluetooth();
+            } else {
+                initStageDInternet();
+            }
+        }
+
+        private void initStageDBluetooth() {
+        }
+
+        private void initStageDInternet() {
+        }
+
+        private Drawable generateCoaster(int color) {
+            GradientDrawable gd = (GradientDrawable) getContext().getDrawable(R.drawable.rounded_rect);
+            if (gd != null) {
+                gd.setColor(color);
+            }
+            return gd;
+        }
+
+        static class ColorPicker extends LinearLayout {
+            private int defaultColor = 0xFFFFFFFF, currentColor = defaultColor;
+            private SeekBar redSeekBar, greenSeekBar, blueSeekBar;
+            private OnColorChanged onColor = null;
+
+            public ColorPicker(Context context) {
+                super(context);
+                addViews();
+            }
+
+            public ColorPicker(Context context, int defaultColor) {
+                super(context);
+                this.defaultColor = defaultColor;
+                currentColor = defaultColor;
+                addViews();
+            }
+
+            private void addViews() {
+                SeekBar.OnSeekBarChangeListener onChange = new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                        currentColor = Color.rgb(redSeekBar.getProgress(), greenSeekBar.getProgress(), blueSeekBar.getProgress());
+                        drawThumbs(currentColor);
+                        setCoasterColor(currentColor);
+                        if (onColor != null) onColor.onColorChange(currentColor);
+                    }
+
+                    @Override
+                    public void onStartTrackingTouch(SeekBar seekBar) {
+                    }
+
+                    @Override
+                    public void onStopTrackingTouch(SeekBar seekBar) {
+                    }
+                };
+                setOrientation(VERTICAL);
+                setGravity(Gravity.CENTER);
+                setLayoutDirection(LAYOUT_DIRECTION_LTR);
+                setPadding(15, 15, 15, 15);
+                GradientDrawable redDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFFFF0000});
+                GradientDrawable greenDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFF00FF00});
+                GradientDrawable blueDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFF0000FF});
+                redDrawable.setCornerRadius(8);
+                greenDrawable.setCornerRadius(8);
+                blueDrawable.setCornerRadius(8);
+                redSeekBar = new SeekBar(getContext());
+                greenSeekBar = new SeekBar(getContext());
+                blueSeekBar = new SeekBar(getContext());
+                redSeekBar.setPadding(10, 10, 10, 10);
+                greenSeekBar.setPadding(10, 10, 10, 10);
+                blueSeekBar.setPadding(10, 10, 10, 10);
+                redSeekBar.setProgressDrawable(redDrawable);
+                greenSeekBar.setProgressDrawable(greenDrawable);
+                blueSeekBar.setProgressDrawable(blueDrawable);
+                redSeekBar.setMax(255);
+                greenSeekBar.setMax(255);
+                blueSeekBar.setMax(255);
+                addView(redSeekBar);
+                addView(greenSeekBar);
+                addView(blueSeekBar);
+                redSeekBar.setProgress(Color.red(defaultColor));
+                greenSeekBar.setProgress(Color.green(defaultColor));
+                blueSeekBar.setProgress(Color.blue(defaultColor));
+                redSeekBar.setOnSeekBarChangeListener(onChange);
+                greenSeekBar.setOnSeekBarChangeListener(onChange);
+                blueSeekBar.setOnSeekBarChangeListener(onChange);
+                drawThumbs(defaultColor);
+                setCoasterColor(defaultColor);
+            }
+
+            public void setOnColorChanged(OnColorChanged onc) {
+                onColor = onc;
+            }
+
+            private void drawThumbs(int color) {
+                int redAmount = Color.red(color);
+                int greenAmount = Color.green(color);
+                int blueAmount = Color.blue(color);
+                int xy = ((redSeekBar.getLayoutParams().height - redSeekBar.getPaddingTop() - redSeekBar.getPaddingBottom()) + (greenSeekBar.getLayoutParams().height - greenSeekBar.getPaddingTop() - greenSeekBar.getPaddingBottom()) + (blueSeekBar.getLayoutParams().height - blueSeekBar.getPaddingTop() - blueSeekBar.getPaddingBottom())) / 3;
+                redSeekBar.setThumb(getRoundedRect(Color.rgb(redAmount, 0, 0), xy));
+                greenSeekBar.setThumb(getRoundedRect(Color.rgb(0, greenAmount, 0), xy));
+                blueSeekBar.setThumb(getRoundedRect(Color.rgb(0, 0, blueAmount), xy));
+            }
+
+            @Override
+            public void setLayoutParams(ViewGroup.LayoutParams l) {
+                LinearLayout.LayoutParams l2;
+                if (l instanceof LinearLayout.LayoutParams) {
+                    l2 = ((LinearLayout.LayoutParams) l);
+                    l2.setMargins(0, 10, 0, 10);
+                    super.setLayoutParams(l2);
+                } else {
+                    super.setLayoutParams(l);
+                }
+                redSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
+                greenSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
+                blueSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
+                drawThumbs(currentColor);
+            }
+
+            private void setCoasterColor(int color) {
+                float corner = 16;
+                float[] corners = new float[]{corner, corner, corner, corner, corner, corner, corner, corner};
+                RoundRectShape shape = new RoundRectShape(corners, new RectF(), corners);
+                ShapeDrawable coaster = new ShapeDrawable(shape);
+                coaster.getPaint().setColor(color);
+                setBackground(coaster);
+            }
+
+            private LayerDrawable getRoundedRect(int color, int size) {
+                float corner = 16;
+                float[] corners = new float[]{corner, corner, corner, corner, corner, corner, corner, corner};
+                RoundRectShape shape = new RoundRectShape(corners, new RectF(), corners);
+                RoundRectShape shape2 = new RoundRectShape(corners, new RectF(8, 8, 8, 8), corners);
+                ShapeDrawable rectBack = new ShapeDrawable(shape2);
+                rectBack.setIntrinsicHeight(size);
+                rectBack.setIntrinsicWidth(size);
+                rectBack.getPaint().setColor(Color.WHITE);
+                ShapeDrawable rect = new ShapeDrawable(shape);
+                rect.setIntrinsicHeight((size));
+                rect.setIntrinsicWidth((size));
+                rect.getPaint().setColor(color);
+                LayerDrawable ld = new LayerDrawable(new Drawable[]{rect, rectBack});
+                return ld;
+            }
+
+            public interface OnColorChanged {
+                void onColorChange(int color);
             }
         }
     }

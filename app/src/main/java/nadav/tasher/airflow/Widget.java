@@ -45,9 +45,9 @@ public class Widget extends AppWidgetProvider {
         String confName = Main.getWidgetConfiguration(context, appWidgetId);
         Main.Configuration configuration = new Main.Configuration(sp.getString(confName, "{}"));
         RemoteViews view = new RemoteViews(context.getPackageName(), R.layout.widget);
-        view.setInt(R.id.background, "setColorFilter", configuration.getValue(Main.Configuration.backgroundColor, 0xff123456));
-        view.setInt(R.id.title, "setTextColor", configuration.getValue(Main.Configuration.textColor, 0xff000000));
-        view.setString(R.id.title, "setText", configuration.getValue(Main.Configuration.title, "No Title"));
+//        view.setInt(R.id.background, "setColorFilter", configuration.getValue(Main.Configuration.backgroundColor, 0xff123456));
+        view.setTextColor(R.id.title,configuration.getValue(Main.Configuration.textColor, 0xff000000));
+        view.setTextViewText(R.id.title, configuration.getValue(Main.Configuration.title, "No Title"));
         Intent mIntent = new Intent(context, Executor.class);
         mIntent.setAction(Intent.ACTION_MAIN);
         mIntent.putExtra(Main.configuration, confName);

@@ -2,13 +2,14 @@
              android:id="@+id/background"
              android:layout_width="match_parent"
              android:layout_height="match_parent"
+             android:gravity="center"
              android:background="@drawable/rounded_rect">
 
     <TextView
         android:id="@+id/title"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_gravity="center"
+        android:gravity="center"
         android:textAppearance="?android:attr/textAppearanceLarge"
         android:textColor="#000000"/>
 </FrameLayout>
