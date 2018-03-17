@@ -1,75 +1,56 @@
 package nadav.tasher.airflow;
 
 import android.annotation.TargetApi;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.service.quicksettings.TileService;
+import android.util.Log;
+
+import nadav.tasher.lightool.Tunnel;
 
 @TargetApi(Build.VERSION_CODES.N)
 public class Tile extends TileService {
-	BroadcastReceiver update=new BroadcastReceiver() {
-		@Override
-		public void onReceive(Context context, Intent intent) {
-			SharedPreferences sp=getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-			String wid=sp.getString("SELECTED_QS", null);
-			if(wid!=null){
-				String text=sp.getString(wid + Main.ptext, "Send Flow");
-				getQsTile().setLabel(text);
-				getQsTile().updateTile();
-			}
-		}
-	};
-	@Override
-	public void onClick() {
-		super.onClick();
-		SharedPreferences sp=getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-		String wid=sp.getString("SELECTED_QS", null);
-		if(wid!=null){
-			String text=sp.getString(wid + Main.ptext, "Send Flow");
-			getQsTile().setLabel(text);
-			getQsTile().updateTile();
-			Intent in;
-			if(sp.contains(wid + Main.pdata)){
-				in=new Intent(Main.send_broadcast_bluetooth);
-				in.putExtra("config", wid);
-			}else{
-				in=new Intent(Main.send_broadcast_network);
-				in.putExtra("config", wid);
-			}
-			sendBroadcast(in);
-			sendBroadcast(new Intent("nadav.tasher.airflow.UPDATE"));
-		}
-	}
-	@Override
-	public void onStartListening() {
-		super.onStartListening();
-		registerReceiver(update, new IntentFilter("nadav.tasher.airflow.UPDATE"));
-		SharedPreferences sp=getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-		String wid=sp.getString("SELECTED_QS", null);
-		if(wid!=null){
-			String text=sp.getString(wid + Main.ptext, "Send Flow");
-			getQsTile().setLabel(text);
-			getQsTile().updateTile();
-		}
-	}
-	@Override
-	public void onStopListening() {
-		super.onStopListening();
-		unregisterReceiver(update);
-	}
-	@Override
-	public void onTileAdded() {
-		super.onTileAdded();
-		SharedPreferences sp=getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-		String wid=sp.getString("SELECTED_QS", null);
-		if(wid!=null){
-			String text=sp.getString(wid + Main.ptext, "Send Flow");
-			getQsTile().setLabel(text);
-			getQsTile().updateTile();
-		}
-	}
+    Tunnel.OnTunnel<String> mTunnelReceiver = new Tunnel.OnTunnel<String>() {
+        @Override
+        public void onReceive(String s) {
+            updateTile(s);
+        }
+    };
+
+    private void updateTile(String s) {
+        SharedPreferences sp = getSharedPreferences(getPackageName(), MODE_PRIVATE);
+        String wid = sp.getString(Main.qs, null);
+        if (wid != null) {
+            Main.Configuration conf = new Main.Configuration(sp.getString(wid, "{}"));
+            getQsTile().setLabel(conf.getValue(Main.Configuration.title, "No Config"));
+            getQsTile().updateTile();
+            Log.i("Tile", "Updated, Cause: " + s);
+        } else {
+            Log.i("Tile", "Not Updated. Cause For Try: " + s);
+        }
+    }
+
+    @Override
+    public void onClick() {
+        super.onClick();
+    }
+
+    @Override
+    public void onStartListening() {
+        super.onStartListening();
+        Main.widgetTunnel.addReceiver(mTunnelReceiver);
+        updateTile("Started Service");
+    }
+
+    @Override
+    public void onStopListening() {
+        super.onStopListening();
+        Main.widgetTunnel.removeReceiver(mTunnelReceiver);
+    }
+
+    @Override
+    public void onTileAdded() {
+        super.onTileAdded();
+        updateTile("Tile Creation");
+    }
 }

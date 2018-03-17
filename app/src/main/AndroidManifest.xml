@@ -48,14 +48,8 @@
                 <action android:name="nadav.tasher.airflow.SEND_COMMAND_NETWORK"/>
             </intent-filter>
         </receiver>
-        <receiver
-            android:name=".BlueSend">
-            <intent-filter>
-                <action android:name="nadav.tasher.airflow.SEND_COMMAND_BLUETOOTH"/>
-            </intent-filter>
-        </receiver>
 
-        <activity android:name=".SendActivity">
+        <activity android:name=".Executor">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
             </intent-filter>
