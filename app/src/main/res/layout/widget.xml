@@ -1,9 +1,15 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-             android:id="@+id/background"
+             android:id="@+id/layout"
              android:layout_width="match_parent"
              android:layout_height="match_parent"
-             android:gravity="center"
-             android:background="@drawable/rounded_rect">
+             android:gravity="center">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/rounded_rect"
+        android:id="@+id/background"
+        android:scaleType="center"/>
 
     <TextView
         android:id="@+id/title"

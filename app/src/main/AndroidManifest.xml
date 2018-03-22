@@ -28,7 +28,6 @@
         <receiver android:name=".Widget">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
-                <action android:name="nadav.tasher.airflow.UPDATE"/>
             </intent-filter>
 
             <meta-data
@@ -41,13 +40,6 @@
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
             </intent-filter>
         </activity>
-
-        <receiver
-            android:name=".NetSend">
-            <intent-filter>
-                <action android:name="nadav.tasher.airflow.SEND_COMMAND_NETWORK"/>
-            </intent-filter>
-        </receiver>
 
         <activity android:name=".Executor">
             <intent-filter>

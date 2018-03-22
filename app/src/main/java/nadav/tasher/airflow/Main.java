@@ -4,12 +4,14 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
+import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
@@ -27,12 +29,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -57,6 +61,7 @@ import java.util.UUID;
 
 import nadav.tasher.lightool.Device;
 import nadav.tasher.lightool.Graphics;
+import nadav.tasher.lightool.Net;
 import nadav.tasher.lightool.Tunnel;
 
 public class Main extends Activity {
@@ -87,8 +92,12 @@ public class Main extends Activity {
                         statusTunnel.send(result);
                         if (result.status == Status.STATUS_SUCCEDED) {
                             Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
-                        } else {
+                        } else if (result.status == Status.STATUS_FAILED) {
                             Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                        } else if (result.status == Status.STATUS_IN_PROGRESS) {
+                            Toast.makeText(action.c, "Not Finished.", Toast.LENGTH_LONG).show();
+                        } else if (result.status == Status.STATUS_STARTING) {
+                            Toast.makeText(action.c, "Failed To Start.", Toast.LENGTH_LONG).show();
                         }
                     }
                 });
@@ -97,7 +106,50 @@ public class Main extends Activity {
         });
         internetTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
             @Override
-            public void onReceive(Action action) {
+            public void onReceive(final Action action) {
+                SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
+                final Configuration configuration = new Configuration(sp.getString(action.config, "{}"));
+                Net.Request.RequestParameter[] parms;
+                try {
+                    JSONArray requestParms = new JSONArray(configuration.getValue(Configuration.requestParameters, "[]"));
+                    parms = new Net.Request.RequestParameter[requestParms.length()];
+                    for (int rp = 0; rp < requestParms.length(); rp++) {
+                        JSONObject jo = new JSONObject(requestParms.getString(rp));
+                        parms[rp] = new Net.Request.RequestParameter(jo.getString("name"), jo.getString("value"));
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    parms = new Net.Request.RequestParameter[0];
+                }
+                if (configuration.getValue(Configuration.method, Configuration.METHOD_INTERNET_GET).equals(Configuration.METHOD_INTERNET_GET)) {
+                    new Net.Request.Get(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
+                        @Override
+                        public void onRequest(String s) {
+                            if (s == null) {
+                                Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                            } else {
+                                Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                            }
+                            if(configuration.getValue(Configuration.displayOutput,false)){
+                                Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    }).execute();
+                } else {
+                    new Net.Request.Post(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
+                        @Override
+                        public void onRequest(String s) {
+                            if (s == null) {
+                                Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                            } else {
+                                Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                            }
+                            if(configuration.getValue(Configuration.displayOutput,false)){
+                                Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    }).execute();
+                }
             }
         });
         activateTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
@@ -256,6 +308,12 @@ public class Main extends Activity {
     }
 
     private void initStageB() {
+        configurationChangeTunnel.addReceiver(new Tunnel.OnTunnel<ArrayList<Configuration>>() {
+            @Override
+            public void onReceive(ArrayList<Configuration> configurations) {
+                sendBroadcast(new Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE));
+            }
+        });
         manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         if (manager != null)
             bluetoothAdapter = manager.getAdapter();
@@ -500,9 +558,102 @@ public class Main extends Activity {
                 }
             }
         } else {
-            EditText urlText = new EditText(this);
-            EditText portText = new EditText(this);
+            final EditText urlBaseText = new EditText(this);
+            final EditText urlPathText = new EditText(this);
+            final EditText portText = new EditText(this);
             EditText fileText = new EditText(this);
+            CheckBox displayOutput = new CheckBox(this);
+            urlBaseText.setHint("e.g. http://example.com");
+            urlBaseText.setText(configuration.getValue(Configuration.urlBase, ""));
+            urlBaseText.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(final CharSequence s, int start, int before, int count) {
+                    if(!s.toString().startsWith("http://")&&!s.toString().startsWith("https://")){
+                        urlBaseText.setError("URL Must Begin With 'http://' Or 'https://'");
+                    }else{
+                        urlBaseText.setError(null);
+                    }
+                    final Handler handler = new Handler();
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (s.toString().equals(urlBaseText.getText().toString())) {
+                                configuration.setValue(Configuration.urlBase, s.toString());
+                            }
+                        }
+                    }, 100);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            });
+            all.addView(getText("Base URL:"));
+            all.addView(urlBaseText);
+
+            portText.setHint("e.g. 80");
+            portText.setText(configuration.getValue(Configuration.port, ""));
+            portText.setInputType(InputType.TYPE_CLASS_NUMBER);
+            portText.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(final CharSequence s, int start, int before, int count) {
+                    final Handler handler = new Handler();
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (s.toString().equals(portText.getText().toString())&&s.toString().length()>0) {
+                                configuration.setValue(Configuration.port, Integer.parseInt(s.toString()));
+                            }
+                        }
+                    }, 100);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            });
+            all.addView(getText("Port:"));
+            all.addView(portText);
+
+            urlPathText.setHint("e.g. /index.php");
+            urlPathText.setText(configuration.getValue(Configuration.urlPath, "/"));
+            urlPathText.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(final CharSequence s, int start, int before, int count) {
+                    if(!s.toString().startsWith("/")){
+                        urlBaseText.setError("Path Must Begin With '/'");
+                    }else{
+                        urlBaseText.setError(null);
+                    }
+                    final Handler handler = new Handler();
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (s.toString().equals(urlPathText.getText().toString())) {
+                                configuration.setValue(Configuration.urlPath, s.toString());
+                            }
+                        }
+                    }, 100);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            });
+            all.addView(getText("URL Path:"));
+            all.addView(urlPathText);
         }
         all.addView(getText("Text Color:"));
         ConfigurationView.ColorPicker textColorPicker = new ConfigurationView.ColorPicker(this, configuration.getValue(Configuration.textColor, 0xff000000));
@@ -870,7 +1021,10 @@ public class Main extends Activity {
     static class Configuration {
         static final int TYPE_BLUETOOTH = 1;
         static final int TYPE_INTERNET = 0;
-        static final String url = "internet_address";
+        static final String METHOD_INTERNET_POST = "post";
+        static final String METHOD_INTERNET_GET = "get";
+        static final String urlBase = "internet_address_base";
+        static final String urlPath = "internet_address_path";
         static final String type = "type";
         static final String title = "title";
         static final String port = "internet_port";
@@ -879,6 +1033,9 @@ public class Main extends Activity {
         static final String backgroundColor = "back_color";
         static final String textColor = "text_color";
         static final String file = "internet_file";
+        static final String method = "internet_method";
+        static final String requestParameters = "internet_parameters";
+        static final String displayOutput = "internet_display_output";
         static final String count = "uses";
         static final String name = "name";
         static final String deviceName = "bluetooth_device_name";
@@ -965,7 +1122,7 @@ public class Main extends Activity {
     static class ConfigurationView extends LinearLayout {
 
         Configuration configuration;
-        LinearLayout left, right;
+        LinearLayout bottomButtons, divider, left, right;
         OnEdit onEdit = null;
 
         public ConfigurationView(Context cont, Configuration c) {
@@ -993,6 +1150,7 @@ public class Main extends Activity {
         public void setLayoutParams(ViewGroup.LayoutParams params) {
             super.setLayoutParams(params);
             reside(params);
+            redivide(params);
         }
 
         private void reside(ViewGroup.LayoutParams params) {
@@ -1003,8 +1161,14 @@ public class Main extends Activity {
             }
         }
 
+        private void redivide(ViewGroup.LayoutParams params) {
+            if (divider != null && bottomButtons != null && bottomButtons.getLayoutParams() != null && params != null) {
+                divider.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, getLayoutParams().height - bottomButtons.getLayoutParams().height - getPaddingTop() - getPaddingBottom()));
+            }
+        }
+
         private void initStageA() {
-            setOrientation(HORIZONTAL);
+            setOrientation(VERTICAL);
             setGravity(Gravity.CENTER);
             setBackground(generateCoaster(configuration.getValue(Configuration.backgroundColor, Main.coasterColor)));
             setPadding(10, 10, 10, 10);
@@ -1017,25 +1181,23 @@ public class Main extends Activity {
         }
 
         private void initStageC() {
+            divider = new LinearLayout(getContext());
             left = new LinearLayout(getContext());
             right = new LinearLayout(getContext());
+            divider.setOrientation(LinearLayout.HORIZONTAL);
             left.setOrientation(LinearLayout.VERTICAL);
             right.setOrientation(LinearLayout.VERTICAL);
+            divider.setGravity(Gravity.CENTER);
             left.setGravity(Gravity.CENTER);
             right.setGravity(Gravity.CENTER);
             TextView title = new TextView(getContext());
             title.setGravity(Gravity.CENTER);
             title.setTextSize(25);
-            title.setText(configuration.getValue(Configuration.title, "No Title"));
+            String nameText = configuration.getValue(Configuration.title, "No Title") + " (" + configuration.getValue(Configuration.name, "No Name!") + ")";
+            title.setText(nameText);
             title.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
-            TextView name = new TextView(getContext());
-            name.setGravity(Gravity.CENTER);
-            name.setTextSize(20);
-            name.setText(configuration.getValue(Configuration.name, "No Name!"));
-            name.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
             left.addView(title);
-            left.addView(name);
-            LinearLayout bottomButtons = new LinearLayout(getContext());
+            bottomButtons = new LinearLayout(getContext());
             bottomButtons.setGravity(Gravity.CENTER);
             bottomButtons.setOrientation(LinearLayout.HORIZONTAL);
             ImageButton share, edit, flow;
@@ -1061,7 +1223,6 @@ public class Main extends Activity {
             bottomButtons.addView(flow);
             bottomButtons.setPadding(5, 5, 5, 5);
             bottomButtons.setBackground(generateCoaster(configuration.getValue(Configuration.textColor, 0xff000000)));
-            left.addView(bottomButtons);
             flow.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1075,11 +1236,15 @@ public class Main extends Activity {
                         onEdit.onEdit(configuration.getValue(Configuration.name, null));
                 }
             });
+            bottomButtons.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, size + bottomButtons.getPaddingTop() + bottomButtons.getPaddingBottom()));
             left.setPadding(20, 0, 0, 0);
             right.setPadding(0, 0, 20, 0);
-            addView(left);
-            addView(right);
+            divider.addView(left);
+            divider.addView(right);
+            addView(divider);
+            addView(bottomButtons);
             reside(getLayoutParams());
+            redivide(getLayoutParams());
             if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_BLUETOOTH) {
                 initStageDBluetooth();
             } else {
@@ -1092,6 +1257,27 @@ public class Main extends Activity {
         }
 
         private void initStageDBluetooth() {
+            TextView deviceName = new TextView(getContext());
+            TextView deviceMac = new TextView(getContext());
+            deviceName.setGravity(Gravity.CENTER);
+            deviceName.setTextSize(20);
+            deviceMac.setGravity(Gravity.CENTER);
+            deviceMac.setTextSize(20);
+            deviceName.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            deviceMac.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            String deviceNameText = "Device Name: " + configuration.getValue(Configuration.deviceName, "No Device");
+            deviceName.setText(deviceNameText);
+            String deviceMacText = "Device MAC: " + configuration.getValue(Configuration.deviceAddress, "No Mac");
+            deviceMac.setText(deviceMacText);
+            left.addView(deviceName);
+            left.addView(deviceMac);
+            TextView data = new TextView(getContext());
+            data.setGravity(Gravity.CENTER);
+            data.setTextSize(25);
+            data.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            String dataText = "Data: \n" + configuration.getValue(Configuration.data, "No Data");
+            data.setText(dataText);
+            right.addView(data);
         }
 
         private void initStageDInternet() {
@@ -1251,7 +1437,7 @@ public class Main extends Activity {
         }
 
         @Override
-        protected final Main.Status doInBackground(String... configurations) {
+        protected Main.Status doInBackground(String... configurations) {
             Main.Status returnStatus = new Main.Status(Main.Status.STATUS_STARTING);
             BluetoothAdapter blueAdapter;
             BluetoothManager manager = (BluetoothManager) action.c.getSystemService(Context.BLUETOOTH_SERVICE);
@@ -1263,34 +1449,31 @@ public class Main extends Activity {
                     blueAdapter.cancelDiscovery();
                     if (!configuration.getValue(Configuration.deviceName, "").equals("") && !configuration.getValue(Configuration.deviceAddress, "").equals("")) {
                         final BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.deviceAddress, ""));
-                        final Main.Status runStatus = new Main.Status(Main.Status.STATUS_STARTING);
                         UUID uuid = device.getUuids()[0].getUuid();
                         try {
                             final BluetoothSocket socket = device.createRfcommSocketToServiceRecord(uuid);
-                            runStatus.status = Main.Status.STATUS_IN_PROGRESS;
+                            returnStatus.status = Main.Status.STATUS_IN_PROGRESS;
                             try {
                                 socket.connect();
+                                while (!socket.isConnected())
+                                    returnStatus.status = Main.Status.STATUS_IN_PROGRESS;
+                                if (socket.isConnected()) {
+                                    socket.getOutputStream().write(configuration.getValue(Configuration.data, "").getBytes());
+                                    try {
+                                        socket.getOutputStream().flush();
+                                        socket.getOutputStream().close();
+                                        socket.close();
+                                    } catch (IOException ignored) {
+                                    }
+                                    returnStatus.status = Main.Status.STATUS_SUCCEDED;
+                                } else {
+                                    returnStatus.status = Main.Status.STATUS_FAILED;
+                                }
                             } catch (IOException e) {
-                                e.printStackTrace();
-                                runStatus.status = Main.Status.STATUS_FAILED;
-                            }
-                            while (!socket.isConnected())
-                                runStatus.status = Main.Status.STATUS_IN_PROGRESS;
-
-                            if (socket.isConnected()) {
-                                socket.getOutputStream().write(configuration.getValue(Configuration.data, "").getBytes());
-                                try {
-                                    socket.getOutputStream().flush();
-                                    socket.getOutputStream().close();
-                                    socket.close();
-                                }catch(IOException ignored){}
-                                runStatus.status = Main.Status.STATUS_SUCCEDED;
-                            } else {
-                                runStatus.status = Main.Status.STATUS_FAILED;
+                                returnStatus.status = Main.Status.STATUS_FAILED;
                             }
                         } catch (IOException e) {
-                            e.printStackTrace();
-                            runStatus.status = Main.Status.STATUS_FAILED;
+                            returnStatus.status = Main.Status.STATUS_FAILED;
                         }
                     }
                 } else {

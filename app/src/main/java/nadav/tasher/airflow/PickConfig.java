@@ -76,6 +76,7 @@ public class PickConfig extends Activity {
                 resultValue.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
                 setResult(RESULT_OK, resultValue);
                 appWidgetManager.updateAppWidget(getIntent().getExtras().getInt(AppWidgetManager.EXTRA_APPWIDGET_ID), views);
+                sendBroadcast(new Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE));
                 finish();
             }
         });
