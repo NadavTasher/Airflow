@@ -18,7 +18,7 @@ import android.widget.ScrollView;
 
 import java.util.ArrayList;
 
-public class PickConfig extends Activity {
+public class PickConfiguration extends Activity {
     private int id;
 
     @Override
@@ -42,7 +42,7 @@ public class PickConfig extends Activity {
                 finish();
             }
         });
-        newC.setText(getString(R.string.newC));
+        newC.setText(getString(R.string.new_configuration_short));
         id = getIntent().getExtras().getInt(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
         final ArrayList<String> widgets = new ArrayList<>();
         widgets.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));

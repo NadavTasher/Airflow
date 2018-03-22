@@ -125,13 +125,14 @@ public class Main extends Activity {
                     new Net.Request.Get(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
                         @Override
                         public void onRequest(String s) {
-                            if (s == null) {
-                                Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
-                            } else {
-                                Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
-                            }
-                            if(configuration.getValue(Configuration.displayOutput,false)){
+                            if (configuration.getValue(Configuration.displayOutput, false)) {
                                 Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
+                            } else {
+                                if (s == null) {
+                                    Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                                } else {
+                                    Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                }
                             }
                         }
                     }).execute();
@@ -139,13 +140,14 @@ public class Main extends Activity {
                     new Net.Request.Post(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
                         @Override
                         public void onRequest(String s) {
-                            if (s == null) {
-                                Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
-                            } else {
-                                Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
-                            }
-                            if(configuration.getValue(Configuration.displayOutput,false)){
+                            if (configuration.getValue(Configuration.displayOutput, false)) {
                                 Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
+                            } else {
+                                if (s == null) {
+                                    Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                                } else {
+                                    Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                }
                             }
                         }
                     }).execute();
@@ -561,7 +563,37 @@ public class Main extends Activity {
             final EditText urlBaseText = new EditText(this);
             final EditText urlPathText = new EditText(this);
             final EditText portText = new EditText(this);
-            EditText fileText = new EditText(this);
+            RadioGroup method = new RadioGroup(this);
+            RadioButton post = new RadioButton(this);
+            RadioButton get = new RadioButton(this);
+            post.setText("(HTTP[/S]) Post");
+            get.setText("(HTTP[/S]) Get");
+            post.setGravity(Gravity.CENTER);
+            get.setGravity(Gravity.CENTER);
+            method.addView(post);
+            method.addView(get);
+            if (configuration.getValue(Configuration.method, Configuration.METHOD_INTERNET_GET).equals(Configuration.METHOD_INTERNET_GET)) {
+                get.setChecked(true);
+            } else {
+                post.setChecked(true);
+            }
+            post.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    if (isChecked) {
+                        configuration.setValue(Configuration.method, Configuration.METHOD_INTERNET_POST);
+                    }
+                }
+            });
+            get.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    if (isChecked) {
+                        configuration.setValue(Configuration.method, Configuration.METHOD_INTERNET_GET);
+                    }
+                }
+            });
+            all.addView(method);
             CheckBox displayOutput = new CheckBox(this);
             urlBaseText.setHint("e.g. http://example.com");
             urlBaseText.setText(configuration.getValue(Configuration.urlBase, ""));
@@ -572,9 +604,9 @@ public class Main extends Activity {
 
                 @Override
                 public void onTextChanged(final CharSequence s, int start, int before, int count) {
-                    if(!s.toString().startsWith("http://")&&!s.toString().startsWith("https://")){
+                    if (!s.toString().startsWith("http://") && !s.toString().startsWith("https://")) {
                         urlBaseText.setError("URL Must Begin With 'http://' Or 'https://'");
-                    }else{
+                    } else {
                         urlBaseText.setError(null);
                     }
                     final Handler handler = new Handler();
@@ -594,7 +626,6 @@ public class Main extends Activity {
             });
             all.addView(getText("Base URL:"));
             all.addView(urlBaseText);
-
             portText.setHint("e.g. 80");
             portText.setText(configuration.getValue(Configuration.port, ""));
             portText.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -609,7 +640,7 @@ public class Main extends Activity {
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
-                            if (s.toString().equals(portText.getText().toString())&&s.toString().length()>0) {
+                            if (s.toString().equals(portText.getText().toString()) && s.toString().length() > 0) {
                                 configuration.setValue(Configuration.port, Integer.parseInt(s.toString()));
                             }
                         }
@@ -622,7 +653,6 @@ public class Main extends Activity {
             });
             all.addView(getText("Port:"));
             all.addView(portText);
-
             urlPathText.setHint("e.g. /index.php");
             urlPathText.setText(configuration.getValue(Configuration.urlPath, "/"));
             urlPathText.addTextChangedListener(new TextWatcher() {
@@ -632,9 +662,9 @@ public class Main extends Activity {
 
                 @Override
                 public void onTextChanged(final CharSequence s, int start, int before, int count) {
-                    if(!s.toString().startsWith("/")){
+                    if (!s.toString().startsWith("/")) {
                         urlBaseText.setError("Path Must Begin With '/'");
-                    }else{
+                    } else {
                         urlBaseText.setError(null);
                     }
                     final Handler handler = new Handler();
@@ -654,11 +684,39 @@ public class Main extends Activity {
             });
             all.addView(getText("URL Path:"));
             all.addView(urlPathText);
+            displayOutput.setText(R.string.display_results);
+            displayOutput.setChecked(configuration.getValue(Configuration.displayOutput, false));
+            displayOutput.setTextSize(20);
+            displayOutput.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    configuration.setValue(Configuration.displayOutput, isChecked);
+                }
+            });
+            all.addView(displayOutput);
+            int size = ((int) (Device.screenX(getApplicationContext()) / 2.5));
+            String[] titles = new String[]{"Name", "Value"};
+            Table dataTable;
+            try {
+                dataTable = new Table(this, size, Table.MODE_RW, new JSONArray(configuration.getValue(Configuration.requestParameters, "[]")), titles);
+            } catch (JSONException e) {
+                dataTable = new Table(this, size, Table.MODE_RW, new JSONArray(), titles);
+            }
+            dataTable.setShowRemoveButton(true, size / 4);
+            all.addView(getText("Request Parameters:"));
+            all.addView(dataTable);
+            dataTable.setOnChanged(new Table.OnChanged() {
+                @Override
+                public void onChanged(JSONArray nowData) {
+                    configuration.setValue(Configuration.requestParameters, nowData.toString());
+                }
+            });
+            dataTable.setPadding(15, 15, 15, 15);
         }
         all.addView(getText("Text Color:"));
-        ConfigurationView.ColorPicker textColorPicker = new ConfigurationView.ColorPicker(this, configuration.getValue(Configuration.textColor, 0xff000000));
+        ColorPicker textColorPicker = new ColorPicker(this, configuration.getValue(Configuration.textColor, 0xff000000));
         textColorPicker.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Device.screenY(getApplication()) / 4));
-        textColorPicker.setOnColorChanged(new ConfigurationView.ColorPicker.OnColorChanged() {
+        textColorPicker.setOnColorChanged(new ColorPicker.OnColorChanged() {
             @Override
             public void onColorChange(int color) {
                 configuration.setValue(Configuration.textColor, color);
@@ -666,9 +724,9 @@ public class Main extends Activity {
         });
         all.addView(textColorPicker);
         all.addView(getText("Background Color:"));
-        ConfigurationView.ColorPicker backgroundColorPicker = new ConfigurationView.ColorPicker(this, configuration.getValue(Configuration.backgroundColor, coasterColor));
+        ColorPicker backgroundColorPicker = new ColorPicker(this, configuration.getValue(Configuration.backgroundColor, coasterColor));
         backgroundColorPicker.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Device.screenY(getApplication()) / 4));
-        backgroundColorPicker.setOnColorChanged(new ConfigurationView.ColorPicker.OnColorChanged() {
+        backgroundColorPicker.setOnColorChanged(new ColorPicker.OnColorChanged() {
             @Override
             public void onColorChange(int color) {
                 configuration.setValue(Configuration.backgroundColor, color);
@@ -1125,6 +1183,10 @@ public class Main extends Activity {
         LinearLayout bottomButtons, divider, left, right;
         OnEdit onEdit = null;
 
+        public ConfigurationView(Context c){
+            super(c);
+        }
+
         public ConfigurationView(Context cont, Configuration c) {
             super(cont);
             configuration = c;
@@ -1158,6 +1220,9 @@ public class Main extends Activity {
                 LinearLayout.LayoutParams lp = new LayoutParams(params.width / 2, ViewGroup.LayoutParams.MATCH_PARENT);
                 left.setLayoutParams(lp);
                 right.setLayoutParams(lp);
+                if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_INTERNET) {
+                    initStageEInternet();
+                }
             }
         }
 
@@ -1237,8 +1302,8 @@ public class Main extends Activity {
                 }
             });
             bottomButtons.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, size + bottomButtons.getPaddingTop() + bottomButtons.getPaddingBottom()));
-            left.setPadding(20, 0, 0, 0);
-            right.setPadding(0, 0, 20, 0);
+            left.setPadding(20, 0, 10, 0);
+            right.setPadding(10, 0, 20, 0);
             divider.addView(left);
             divider.addView(right);
             addView(divider);
@@ -1281,8 +1346,42 @@ public class Main extends Activity {
         }
 
         private void initStageDInternet() {
+            TextView url = new TextView(getContext());
+            url.setGravity(Gravity.CENTER);
+            url.setTextSize(20);
+            url.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            String urlText="Server: "+configuration.getValue(Configuration.urlBase,"No Base URL").replaceAll("https://","").replaceAll("http://","");
+            url.setText(urlText);
+            TextView port = new TextView(getContext());
+            port.setGravity(Gravity.CENTER);
+            port.setTextSize(20);
+            port.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            String portText="Port: "+configuration.getValue(Configuration.port,80);
+            port.setText(portText);
+            TextView method = new TextView(getContext());
+            method.setGravity(Gravity.CENTER);
+            method.setTextSize(20);
+            method.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            String methodText="Method: "+configuration.getValue(Configuration.method,Configuration.METHOD_INTERNET_GET).substring(0,1).toUpperCase()+configuration.getValue(Configuration.method,Configuration.METHOD_INTERNET_GET).substring(1);
+            method.setText(methodText);
+            left.addView(url);
+            left.addView(port);
+            left.addView(method);
+            initStageEInternet();
         }
-
+        private void initStageEInternet(){
+            right.removeAllViews();
+            int size = right.getLayoutParams().width/2;
+            String[] titles = new String[]{"Name", "Value"};
+            Table dataTable;
+            try {
+                dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(configuration.getValue(Configuration.requestParameters, "[]")), titles);
+            } catch (JSONException e) {
+                dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(), titles);
+            }
+            right.addView(dataTable);
+            dataTable.setPadding(5, 5, 5, 5);
+        }
         private Drawable generateCoaster(int color) {
             GradientDrawable gd = (GradientDrawable) getContext().getDrawable(R.drawable.rounded_rect);
             if (gd != null) {
@@ -1294,135 +1393,345 @@ public class Main extends Activity {
         public interface OnEdit {
             void onEdit(String conf);
         }
+    }
 
-        static class ColorPicker extends LinearLayout {
-            private int defaultColor = 0xFFFFFFFF, currentColor = defaultColor;
-            private SeekBar redSeekBar, greenSeekBar, blueSeekBar;
-            private OnColorChanged onColor = null;
+    static class ColorPicker extends LinearLayout {
+        private int defaultColor = 0xFFFFFFFF, currentColor = defaultColor;
+        private SeekBar redSeekBar, greenSeekBar, blueSeekBar;
+        private OnColorChanged onColor = null;
 
-            public ColorPicker(Context context) {
-                super(context);
-                addViews();
-            }
+        public ColorPicker(Context context) {
+            super(context);
+            addViews();
+        }
 
-            public ColorPicker(Context context, int defaultColor) {
-                super(context);
-                this.defaultColor = defaultColor;
-                currentColor = defaultColor;
-                addViews();
-            }
+        public ColorPicker(Context context, int defaultColor) {
+            super(context);
+            this.defaultColor = defaultColor;
+            currentColor = defaultColor;
+            addViews();
+        }
 
-            private void addViews() {
-                SeekBar.OnSeekBarChangeListener onChange = new SeekBar.OnSeekBarChangeListener() {
-                    @Override
-                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                        currentColor = Color.rgb(redSeekBar.getProgress(), greenSeekBar.getProgress(), blueSeekBar.getProgress());
-                        drawThumbs(currentColor);
-                        setCoasterColor(currentColor);
-                        if (onColor != null) onColor.onColorChange(currentColor);
-                    }
-
-                    @Override
-                    public void onStartTrackingTouch(SeekBar seekBar) {
-                    }
-
-                    @Override
-                    public void onStopTrackingTouch(SeekBar seekBar) {
-                    }
-                };
-                setOrientation(VERTICAL);
-                setGravity(Gravity.CENTER);
-                setLayoutDirection(LAYOUT_DIRECTION_LTR);
-                setPadding(15, 15, 15, 15);
-                GradientDrawable redDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFFFF0000});
-                GradientDrawable greenDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFF00FF00});
-                GradientDrawable blueDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFF0000FF});
-                redDrawable.setCornerRadius(8);
-                greenDrawable.setCornerRadius(8);
-                blueDrawable.setCornerRadius(8);
-                redSeekBar = new SeekBar(getContext());
-                greenSeekBar = new SeekBar(getContext());
-                blueSeekBar = new SeekBar(getContext());
-                redSeekBar.setPadding(10, 10, 10, 10);
-                greenSeekBar.setPadding(10, 10, 10, 10);
-                blueSeekBar.setPadding(10, 10, 10, 10);
-                redSeekBar.setProgressDrawable(redDrawable);
-                greenSeekBar.setProgressDrawable(greenDrawable);
-                blueSeekBar.setProgressDrawable(blueDrawable);
-                redSeekBar.setMax(255);
-                greenSeekBar.setMax(255);
-                blueSeekBar.setMax(255);
-                addView(redSeekBar);
-                addView(greenSeekBar);
-                addView(blueSeekBar);
-                redSeekBar.setProgress(Color.red(defaultColor));
-                greenSeekBar.setProgress(Color.green(defaultColor));
-                blueSeekBar.setProgress(Color.blue(defaultColor));
-                redSeekBar.setOnSeekBarChangeListener(onChange);
-                greenSeekBar.setOnSeekBarChangeListener(onChange);
-                blueSeekBar.setOnSeekBarChangeListener(onChange);
-                drawThumbs(defaultColor);
-                setCoasterColor(defaultColor);
-            }
-
-            public void setOnColorChanged(OnColorChanged onc) {
-                onColor = onc;
-            }
-
-            private void drawThumbs(int color) {
-                int redAmount = Color.red(color);
-                int greenAmount = Color.green(color);
-                int blueAmount = Color.blue(color);
-                int xy = ((redSeekBar.getLayoutParams().height - redSeekBar.getPaddingTop() - redSeekBar.getPaddingBottom()) + (greenSeekBar.getLayoutParams().height - greenSeekBar.getPaddingTop() - greenSeekBar.getPaddingBottom()) + (blueSeekBar.getLayoutParams().height - blueSeekBar.getPaddingTop() - blueSeekBar.getPaddingBottom())) / 3;
-                redSeekBar.setThumb(getRoundedRect(Color.rgb(redAmount, 0, 0), xy));
-                greenSeekBar.setThumb(getRoundedRect(Color.rgb(0, greenAmount, 0), xy));
-                blueSeekBar.setThumb(getRoundedRect(Color.rgb(0, 0, blueAmount), xy));
-            }
-
-            @Override
-            public void setLayoutParams(ViewGroup.LayoutParams l) {
-                LinearLayout.LayoutParams l2;
-                if (l instanceof LinearLayout.LayoutParams) {
-                    l2 = ((LinearLayout.LayoutParams) l);
-                    l2.setMargins(0, 10, 0, 10);
-                    super.setLayoutParams(l2);
-                } else {
-                    super.setLayoutParams(l);
+        private void addViews() {
+            SeekBar.OnSeekBarChangeListener onChange = new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    currentColor = Color.rgb(redSeekBar.getProgress(), greenSeekBar.getProgress(), blueSeekBar.getProgress());
+                    drawThumbs(currentColor);
+                    setCoasterColor(currentColor);
+                    if (onColor != null) onColor.onColorChange(currentColor);
                 }
-                redSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
-                greenSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
-                blueSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
-                drawThumbs(currentColor);
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                }
+            };
+            setOrientation(VERTICAL);
+            setGravity(Gravity.CENTER);
+            setLayoutDirection(LAYOUT_DIRECTION_LTR);
+            setPadding(15, 15, 15, 15);
+            GradientDrawable redDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFFFF0000});
+            GradientDrawable greenDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFF00FF00});
+            GradientDrawable blueDrawable = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFF000000, 0xFF0000FF});
+            redDrawable.setCornerRadius(8);
+            greenDrawable.setCornerRadius(8);
+            blueDrawable.setCornerRadius(8);
+            redSeekBar = new SeekBar(getContext());
+            greenSeekBar = new SeekBar(getContext());
+            blueSeekBar = new SeekBar(getContext());
+            redSeekBar.setPadding(10, 10, 10, 10);
+            greenSeekBar.setPadding(10, 10, 10, 10);
+            blueSeekBar.setPadding(10, 10, 10, 10);
+            redSeekBar.setProgressDrawable(redDrawable);
+            greenSeekBar.setProgressDrawable(greenDrawable);
+            blueSeekBar.setProgressDrawable(blueDrawable);
+            redSeekBar.setMax(255);
+            greenSeekBar.setMax(255);
+            blueSeekBar.setMax(255);
+            addView(redSeekBar);
+            addView(greenSeekBar);
+            addView(blueSeekBar);
+            redSeekBar.setProgress(Color.red(defaultColor));
+            greenSeekBar.setProgress(Color.green(defaultColor));
+            blueSeekBar.setProgress(Color.blue(defaultColor));
+            redSeekBar.setOnSeekBarChangeListener(onChange);
+            greenSeekBar.setOnSeekBarChangeListener(onChange);
+            blueSeekBar.setOnSeekBarChangeListener(onChange);
+            drawThumbs(defaultColor);
+            setCoasterColor(defaultColor);
+        }
+
+        public void setOnColorChanged(OnColorChanged onc) {
+            onColor = onc;
+        }
+
+        private void drawThumbs(int color) {
+            int redAmount = Color.red(color);
+            int greenAmount = Color.green(color);
+            int blueAmount = Color.blue(color);
+            int xy = ((redSeekBar.getLayoutParams().height - redSeekBar.getPaddingTop() - redSeekBar.getPaddingBottom()) + (greenSeekBar.getLayoutParams().height - greenSeekBar.getPaddingTop() - greenSeekBar.getPaddingBottom()) + (blueSeekBar.getLayoutParams().height - blueSeekBar.getPaddingTop() - blueSeekBar.getPaddingBottom())) / 3;
+            redSeekBar.setThumb(getRoundedRect(Color.rgb(redAmount, 0, 0), xy));
+            greenSeekBar.setThumb(getRoundedRect(Color.rgb(0, greenAmount, 0), xy));
+            blueSeekBar.setThumb(getRoundedRect(Color.rgb(0, 0, blueAmount), xy));
+        }
+
+        @Override
+        public void setLayoutParams(ViewGroup.LayoutParams l) {
+            LinearLayout.LayoutParams l2;
+            if (l instanceof LinearLayout.LayoutParams) {
+                l2 = ((LinearLayout.LayoutParams) l);
+                l2.setMargins(0, 10, 0, 10);
+                super.setLayoutParams(l2);
+            } else {
+                super.setLayoutParams(l);
+            }
+            redSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
+            greenSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
+            blueSeekBar.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, l.height / 4));
+            drawThumbs(currentColor);
+        }
+
+        private void setCoasterColor(int color) {
+            float corner = 16;
+            float[] corners = new float[]{corner, corner, corner, corner, corner, corner, corner, corner};
+            RoundRectShape shape = new RoundRectShape(corners, new RectF(), corners);
+            ShapeDrawable coaster = new ShapeDrawable(shape);
+            coaster.getPaint().setColor(color);
+            setBackground(coaster);
+        }
+
+        private LayerDrawable getRoundedRect(int color, int size) {
+            float corner = 16;
+            float[] corners = new float[]{corner, corner, corner, corner, corner, corner, corner, corner};
+            RoundRectShape shape = new RoundRectShape(corners, new RectF(), corners);
+            RoundRectShape shape2 = new RoundRectShape(corners, new RectF(8, 8, 8, 8), corners);
+            ShapeDrawable rectBack = new ShapeDrawable(shape2);
+            rectBack.setIntrinsicHeight(size);
+            rectBack.setIntrinsicWidth(size);
+            rectBack.getPaint().setColor(Color.WHITE);
+            ShapeDrawable rect = new ShapeDrawable(shape);
+            rect.setIntrinsicHeight((size));
+            rect.setIntrinsicWidth((size));
+            rect.getPaint().setColor(color);
+            LayerDrawable ld = new LayerDrawable(new Drawable[]{rect, rectBack});
+            return ld;
+        }
+
+        public interface OnColorChanged {
+            void onColorChange(int color);
+        }
+    }
+
+    static class Table extends LinearLayout {
+        static final int MODE_RW = 0;
+        static final int MODE_RO = 1;
+        static final int MODE_VO = 2;
+        JSONArray currentData;
+        String[] titles;
+        int mode, size;
+        OnChanged onChanged;
+        int removeButtonSize;
+        boolean removeButton = false;
+
+        public Table(Context context) {
+            super(context);
+        }
+
+        public Table(Context context, int size, int mode, JSONArray currentData, String[] titles) {
+            super(context);
+            this.currentData = currentData;
+            this.mode = mode;
+            this.size = size;
+            this.titles = titles;
+            init();
+        }
+
+        public void setOnChanged(OnChanged onChanged) {
+            this.onChanged = onChanged;
+        }
+
+        public void setShowRemoveButton(boolean isShown, int buttonSize) {
+            removeButton = isShown;
+            removeButtonSize = buttonSize;
+            init();
+        }
+
+        private void init() {
+            removeAllViews();
+            setOrientation(VERTICAL);
+            setGravity(Gravity.CENTER);
+            TableRow title = new TableRow(getContext(), size, MODE_VO, titles, titles);
+            addView(title);
+            ScrollView rowScroll = new ScrollView(getContext());
+            final LinearLayout rows = new LinearLayout(getContext());
+            rows.setOrientation(LinearLayout.VERTICAL);
+            rows.setGravity(Gravity.CENTER);
+            rowScroll.addView(rows);
+            addView(rowScroll);
+            addListElements(rows);
+            ImageButton addNew = new ImageButton(getContext());
+            addNew.setImageDrawable(getContext().getDrawable(R.drawable.ic_add));
+            addNew.setBackground(null);
+            addNew.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    currentData.put(new JSONObject());
+                    addListElements(rows);
+                    if (onChanged != null) onChanged.onChanged(currentData);
+                }
+            });
+            if(mode==MODE_RW)
+            addView(addNew);
+        }
+
+        private void addListElements(final LinearLayout list) {
+            list.removeAllViews();
+            for (int t = 0; t < currentData.length(); t++) {
+                String[] current = new String[titles.length];
+                try {
+                    JSONObject obj = currentData.getJSONObject(t);
+                    for (int a = 0; a < titles.length; a++) {
+                        if (obj.has(titles[a].toLowerCase())) {
+                            current[a] = obj.getString(titles[a].toLowerCase());
+                        }
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                final int finalT = t;
+                final TableRow row = new TableRow(getContext(), size, mode, current, titles);
+                if (removeButton) {
+                    row.showRemoveButton(new OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            currentData.remove(finalT);
+                            addListElements(list);
+                            if (onChanged != null) onChanged.onChanged(currentData);
+                        }
+                    }, removeButtonSize);
+                }
+                list.addView(row);
+                row.setOnChanged(new TableRow.OnChanged() {
+                    @Override
+                    public void onChanged(String name, String value) {
+                        try {
+                            JSONObject buildNew = new JSONObject();
+                            for (int b = 0; b < titles.length; b++) {
+                                buildNew.put(titles[b].toLowerCase(), row.getCurrentValues()[b]);
+                            }
+                            currentData.put(finalT, buildNew);
+                            if (onChanged != null) onChanged.onChanged(currentData);
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+        }
+
+        interface OnChanged {
+            void onChanged(JSONArray nowData);
+        }
+
+        static class TableRow extends LinearLayout {
+            int mode;
+            int size;
+            String[] currentValues;
+            String[] hints;
+            OnChanged onChanged;
+            ImageButton remove;
+
+            public TableRow(Context context) {
+                super(context);
             }
 
-            private void setCoasterColor(int color) {
-                float corner = 16;
-                float[] corners = new float[]{corner, corner, corner, corner, corner, corner, corner, corner};
-                RoundRectShape shape = new RoundRectShape(corners, new RectF(), corners);
-                ShapeDrawable coaster = new ShapeDrawable(shape);
-                coaster.getPaint().setColor(color);
-                setBackground(coaster);
+            public TableRow(Context context, int size, int mode, String[] values, String[] hints) {
+                super(context);
+                this.mode = mode;
+                currentValues = values;
+                this.hints = hints;
+                this.size = size;
+                init();
             }
 
-            private LayerDrawable getRoundedRect(int color, int size) {
-                float corner = 16;
-                float[] corners = new float[]{corner, corner, corner, corner, corner, corner, corner, corner};
-                RoundRectShape shape = new RoundRectShape(corners, new RectF(), corners);
-                RoundRectShape shape2 = new RoundRectShape(corners, new RectF(8, 8, 8, 8), corners);
-                ShapeDrawable rectBack = new ShapeDrawable(shape2);
-                rectBack.setIntrinsicHeight(size);
-                rectBack.setIntrinsicWidth(size);
-                rectBack.getPaint().setColor(Color.WHITE);
-                ShapeDrawable rect = new ShapeDrawable(shape);
-                rect.setIntrinsicHeight((size));
-                rect.setIntrinsicWidth((size));
-                rect.getPaint().setColor(color);
-                LayerDrawable ld = new LayerDrawable(new Drawable[]{rect, rectBack});
-                return ld;
+            public void setOnChanged(OnChanged onChanged) {
+                this.onChanged = onChanged;
             }
 
-            public interface OnColorChanged {
-                void onColorChange(int color);
+            public String[] getCurrentValues() {
+                return currentValues;
+            }
+
+            public void showRemoveButton(View.OnClickListener todo, int s) {
+                remove.setLayoutParams(new LayoutParams(s, ViewGroup.LayoutParams.MATCH_PARENT));
+                int c = 1;
+                getChildAt(c).setLayoutParams(new LayoutParams(getChildAt(c).getLayoutParams().width - remove.getLayoutParams().width, getChildAt(c).getLayoutParams().height));
+                remove.setVisibility(View.VISIBLE);
+                remove.setOnClickListener(todo);
+            }
+
+            private void init() {
+                setOrientation(HORIZONTAL);
+                setGravity(Gravity.CENTER);
+                remove = new ImageButton(getContext());
+                remove.setImageDrawable(getContext().getDrawable(R.drawable.ic_delete));
+                remove.setBackground(null);
+                addView(remove);
+                remove.setVisibility(View.GONE);
+                for (int i = 0; i < currentValues.length; i++) {
+                    final TextView ctv;
+                    if (mode == Table.MODE_VO) {
+                        ctv = new TextView(getContext());
+                    } else if (mode == Table.MODE_RO) {
+                        ctv = new EditText(getContext());
+                        ctv.setInputType(InputType.TYPE_NULL);
+                        ctv.setTextIsSelectable(true);
+                    } else {
+                        ctv = new EditText(getContext());
+                    }
+                    if (hints.length == currentValues.length) {
+                        ctv.setHint(hints[i]);
+                    }
+                    ctv.setTextSize(20);
+                    ctv.setText(currentValues[i]);
+                    final int finalI = i;
+                    ctv.addTextChangedListener(new TextWatcher() {
+                        @Override
+                        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                        }
+
+                        @Override
+                        public void onTextChanged(final CharSequence s, int start, int before, int count) {
+                            final Handler handler = new Handler();
+                            handler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (s.toString().equals(ctv.getText().toString())) {
+                                        currentValues[finalI] = s.toString();
+                                        if (onChanged != null && hints.length == currentValues.length) {
+                                            onChanged.onChanged(hints[finalI], currentValues[finalI]);
+                                        }
+                                    }
+                                }
+                            }, 100);
+                        }
+
+                        @Override
+                        public void afterTextChanged(Editable s) {
+                        }
+                    });
+                    ctv.setLayoutParams(new LayoutParams(size, ViewGroup.LayoutParams.WRAP_CONTENT));
+                    ctv.setGravity(Gravity.CENTER);
+                    addView(ctv);
+                }
+            }
+
+            interface OnChanged {
+                void onChanged(String name, String value);
             }
         }
     }
