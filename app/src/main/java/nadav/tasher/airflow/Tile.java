@@ -16,13 +16,13 @@ public class Tile extends TileService {
             updateTile(s);
         }
     };
-
+    Main.Configuration configuration;
     private void updateTile(String s) {
         SharedPreferences sp = getSharedPreferences(getPackageName(), MODE_PRIVATE);
         String wid = sp.getString(Main.qs, null);
         if (wid != null) {
-            Main.Configuration conf = new Main.Configuration(sp.getString(wid, "{}"));
-            getQsTile().setLabel(conf.getValue(Main.Configuration.title, "No Config"));
+            configuration = new Main.Configuration(sp.getString(wid, "{}"));
+            getQsTile().setLabel(configuration.getValue(Main.Configuration.title, "No Title"));
             getQsTile().updateTile();
             Log.i("Tile", "Updated, Cause: " + s);
         } else {
@@ -33,6 +33,7 @@ public class Tile extends TileService {
     @Override
     public void onClick() {
         super.onClick();
+        Main.activateTunnel.send(new Main.Action(getApplicationContext(),configuration.getValue(Main.Configuration.name,"")));
     }
 
     @Override

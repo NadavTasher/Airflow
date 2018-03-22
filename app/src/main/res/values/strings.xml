@@ -8,4 +8,5 @@
     <string name="text_get">(HTTP[/S]) Get</string>
     <string name="type_text">Text</string>
     <string name="type_json">JSON</string>
+    <string name="text_import_export">Import/Export</string>
 </resources>

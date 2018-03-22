@@ -69,7 +69,7 @@ public class Widget extends AppWidgetProvider {
         view.setTextViewText(R.id.title, configuration.getValue(Main.Configuration.title, "No Title"));
         view.setImageViewResource(R.id.background, R.drawable.rounded_rect);
         view.setInt(R.id.background, "setColorFilter", configuration.getValue(Main.Configuration.backgroundColor,0xff123456));
-        view.setInt(R.id.background, "setAlpha", 128);
+        view.setInt(R.id.background, "setAlpha", 192);
         Intent mIntent = new Intent(context, Executor.class);
         mIntent.setAction(Intent.ACTION_MAIN);
         mIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

@@ -26,7 +26,6 @@ public class PickConfiguration extends Activity {
         super.onCreate(savedInstanceState);
         AlertDialog.Builder ad = new AlertDialog.Builder(this);
         ad.setTitle("Choose Configuration");
-        ad.setIcon(R.drawable.ic_launcher);
         LinearLayout ll = new LinearLayout(this);
         ll.setOrientation(LinearLayout.VERTICAL);
         Button newC = new Button(this);

@@ -31,6 +31,7 @@ import android.os.Handler;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -57,6 +58,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.UUID;
 
 import nadav.tasher.lightool.Device;
@@ -66,7 +68,8 @@ import nadav.tasher.lightool.Tunnel;
 
 public class Main extends Activity {
     static final String qs = "qs";
-    static final String shortcut = "short";
+    static final String importExportIndex = "index";
+    static final String importExportConfigurations = "configurations";
     static final String bluetooth = "bluetooth";
     static final String internet = "internet";
     static final String configuration = "requestedConfig";
@@ -108,13 +111,13 @@ public class Main extends Activity {
 
             Action action;
 
-            private void verbose(String s){
-                if(action.verboser!=null)action.verboser.send(s);
+            private void verbose(String s) {
+                if (action.verboser != null) action.verboser.send(s);
             }
 
             @Override
             public void onReceive(final Action action) {
-                this.action=action;
+                this.action = action;
                 SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
                 final Configuration configuration = new Configuration(sp.getString(action.config, "{}"));
                 Net.Request.RequestParameter[] parms;
@@ -134,10 +137,10 @@ public class Main extends Activity {
                 }
                 if (configuration.getValue(Configuration.method, Configuration.METHOD_INTERNET_GET).equals(Configuration.METHOD_INTERNET_GET)) {
                     verbose("Creating AsyncTask");
-                    Net.Request.Get request=new Net.Request.Get(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
+                    Net.Request.Get request = new Net.Request.Get(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
                         @Override
                         public void onRequest(String s) {
-                            if(action.verboser==null) {
+                            if (action.verboser == null) {
                                 if (configuration.getValue(Configuration.displayOutput, false)) {
                                     Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
                                 } else {
@@ -147,29 +150,34 @@ public class Main extends Activity {
                                         Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
                                     }
                                 }
-                            }else{
-                                verbose("Operation Succeeded, Result:\n\""+s+"\"");
+                            } else {
+                                if (s == null) {
+                                    verbose("Operation Failed");
+                                } else {
+                                    verbose("Operation Succeeded, Result:\n\"" + s + "\"");
+                                }
+                                verbose("Done");
                             }
                         }
                     });
                     verbose("AsyncTask Created");
                     verbose("Checking Network State");
-                    if(Device.isOnline(action.c)){
+                    if (Device.isOnline(action.c)) {
                         verbose("Device Is Online");
                         verbose("Running AsyncTask");
                         request.execute();
-                    }else{
+                    } else {
                         verbose("Device Offline, Canceling Execution");
                         verbose("Operation Failed");
-                        if(action.verboser==null)
-                        Toast.makeText(action.c, "Device Offline.", Toast.LENGTH_LONG).show();
+                        if (action.verboser == null)
+                            Toast.makeText(action.c, "Device Offline.", Toast.LENGTH_LONG).show();
                     }
                 } else {
                     verbose("Creating AsyncTask");
-                    Net.Request.Post request=new Net.Request.Post(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
+                    Net.Request.Post request = new Net.Request.Post(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
                         @Override
                         public void onRequest(String s) {
-                            if(action.verboser==null) {
+                            if (action.verboser == null) {
                                 if (configuration.getValue(Configuration.displayOutput, false)) {
                                     Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
                                 } else {
@@ -179,25 +187,29 @@ public class Main extends Activity {
                                         Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
                                     }
                                 }
-                            }else{
-                                verbose("Operation Succeeded, Result:\n\""+s+"\"");
+                            } else {
+                                if (s == null) {
+                                    verbose("Operation Failed");
+                                } else {
+                                    verbose("Operation Succeeded, Result:\n\"" + s + "\"");
+                                }
+                                verbose("Done");
                             }
                         }
                     });
                     verbose("AsyncTask Created");
                     verbose("Checking Network State");
-                    if(Device.isOnline(action.c)){
+                    if (Device.isOnline(action.c)) {
                         verbose("Device Is Online");
                         verbose("Running AsyncTask");
                         request.execute();
-                    }else{
+                    } else {
                         verbose("Device Offline, Canceling Execution");
                         verbose("Operation Failed");
-                        if(action.verboser==null)
+                        if (action.verboser == null)
                             Toast.makeText(action.c, "Device Offline.", Toast.LENGTH_LONG).show();
                     }
                 }
-                verbose("Done");
             }
         });
         activateTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
@@ -217,9 +229,10 @@ public class Main extends Activity {
     }
 
     private FrameLayout masterLayout;
-    private LinearLayout scrollable;
+    private LinearLayout scrollable, itemScroll;
     private BluetoothManager manager;
     private BluetoothAdapter bluetoothAdapter;
+    private TextView guideText;
 
     static void addConfigurationToList(Context c, int type, String name) {
         SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
@@ -235,6 +248,35 @@ public class Main extends Activity {
             try {
                 JSONArray array = new JSONArray(sp.getString(internet, "[]"));
                 array.put(name);
+                sp.edit().putString(internet, array.toString()).apply();
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    static void removeConfigurationFromList(Context c, int type, String name) {
+        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
+        if (type == Configuration.TYPE_BLUETOOTH) {
+            try {
+                JSONArray array = new JSONArray(sp.getString(bluetooth, "[]"));
+                for (int a = 0; a < array.length(); a++) {
+                    if (array.getString(a).equals(name)) {
+                        array.remove(a);
+                    }
+                }
+                sp.edit().putString(bluetooth, array.toString()).apply();
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        } else {
+            try {
+                JSONArray array = new JSONArray(sp.getString(internet, "[]"));
+                for (int a = 0; a < array.length(); a++) {
+                    if (array.getString(a).equals(name)) {
+                        array.remove(a);
+                    }
+                }
                 sp.edit().putString(internet, array.toString()).apply();
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -297,12 +339,18 @@ public class Main extends Activity {
         }
     }
 
-    static void share(Context c,String text,String title){
+    static void share(Context c, String text, String title) {
         Intent sharingIntent = new Intent(android.content.Intent.ACTION_SEND);
         sharingIntent.setType("text/*");
-        sharingIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, title);
         sharingIntent.putExtra(android.content.Intent.EXTRA_TEXT, text);
-        c.startActivity(Intent.createChooser(sharingIntent,title));
+        c.startActivity(Intent.createChooser(sharingIntent, title));
+    }
+
+    private void removeConfiguration(Context c, String name) {
+        SharedPreferences sp = c.getSharedPreferences(c.getPackageName(), Context.MODE_PRIVATE);
+        Configuration configuration = new Configuration(sp.getString(name, "{}"));
+        removeConfigurationFromList(c, configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH), name);
+        sp.edit().remove(name).apply();
     }
 
     @Override
@@ -317,32 +365,6 @@ public class Main extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         initStageAB();
     }
-    //    void createShortcut(String widget) {
-    //        if (Build.VERSION.SDK_INT >= 25) {
-    //            SharedPreferences sp = getSharedPreferences(getPackageName(), MODE_PRIVATE);
-    //            ShortcutManager shortcutManager = getSystemService(ShortcutManager.class);
-    //            shortcutManager.removeAllDynamicShortcuts();
-    //            ArrayList<ShortcutInfo> scs = new ArrayList<>();
-    //            int higest = 0;
-    //            String nn = null;
-    //            for (int ww = 0; ww < widgets.size(); ww++) {
-    //                if (sp.getInt(widgets.get(ww) + count, 0) > higest) {
-    //                    nn = widgets.get(ww);
-    //                    higest = sp.getInt(widgets.get(ww) + count, 0);
-    //                }
-    //            }
-    //            if (nn != null) {
-    //                String text = sp.getString(nn + ptext, "Send String");
-    //                Intent send = new Intent(this, Executor.class);
-    //                send.setAction(Intent.ACTION_MAIN);
-    //                send.putExtra("config", nn);
-    //                send.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-    //                ShortcutInfo shortcut = new ShortcutInfo.Builder(this, nn).setShortLabel(text).setLongLabel(text).setIcon(Icon.createWithResource(this, R.drawable.ic_launcher)).setIntent(send).build();
-    //                scs.add(shortcut);
-    //                shortcutManager.setDynamicShortcuts(scs);
-    //            }
-    //        }
-    //    }
 
     private void initStageAB() {
         if (Build.VERSION.SDK_INT >= 23) {
@@ -357,10 +379,70 @@ public class Main extends Activity {
         }
     }
 
-    private void remakeTaskDescription() {
-        Bitmap ico = BitmapFactory.decodeResource(getResources(), R.drawable.ic_launcher);
+    private void remakeTaskDescription(int color) {
+        Bitmap ico = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
         ActivityManager.TaskDescription taskDescription = new ActivityManager.TaskDescription(getString(R.string.app_name), ico, color);
         setTaskDescription(taskDescription);
+    }
+
+    private String generateExport() {
+        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        JSONObject output = new JSONObject();
+        try {
+            JSONArray index = new JSONArray();
+            final ArrayList<String> confs = new ArrayList<>();
+            confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_INTERNET));
+            confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));
+            for (int a = 0; a < confs.size(); a++) {
+                index.put(confs.get(a));
+            }
+            output.put(importExportIndex, index);
+            JSONObject configs = new JSONObject();
+            for (int a = 0; a < confs.size(); a++) {
+                configs.put(confs.get(a), new Configuration(sp.getString(confs.get(a), "{}")).getConfiguration());
+            }
+            output.put(importExportConfigurations, configs);
+        } catch (JSONException ignored) {
+        }
+        return output.toString();
+    }
+
+    private void importConfigurations(String json) {
+        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        try {
+            JSONObject input = new JSONObject(json);
+            if (input.has(importExportConfigurations) && input.has(importExportIndex)) {
+                JSONArray index = input.getJSONArray(importExportIndex);
+                JSONObject configurations = input.getJSONObject(importExportConfigurations);
+                Log.i("indez", index.toString());
+                for (int c = 0; c < index.length(); c++) {
+                    String originalName = index.getString(c);
+                    String name = index.getString(c);
+                    if (generateList().contains(name)) {
+                        name += "_" + new Random().nextInt(10);
+                        while (generateList().contains(name)) {
+                            name += new Random().nextInt(10);
+                        }
+                    }
+                    JSONObject config = new JSONObject(configurations.getString(originalName));
+                    Log.i("indez", config.toString());
+                    Configuration configuration = new Configuration(config.toString());
+                    configuration.setValue(Configuration.name, name);
+                    addConfigurationToList(getApplicationContext(), configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH), name);
+                    sp.edit().putString(name, configuration.getConfiguration()).apply();
+                    addToListView(configuration);
+                }
+            }
+        } catch (JSONException ignored) {
+            ignored.printStackTrace();
+        }
+    }
+
+    private ArrayList<String> generateList() {
+        final ArrayList<String> confs = new ArrayList<>();
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_INTERNET));
+        confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));
+        return confs;
     }
 
     private void initStageB() {
@@ -374,16 +456,21 @@ public class Main extends Activity {
         if (manager != null)
             bluetoothAdapter = manager.getAdapter();
         masterLayout = new FrameLayout(this);
-        Graphics.DragNavigation dragNavigation = new Graphics.DragNavigation(getApplicationContext(), getDrawable(R.drawable.ic_launcher), 0x80333333);
+        Graphics.DragNavigation dragNavigation = new Graphics.DragNavigation(getApplicationContext(), getDrawable(R.drawable.ic_flow), 0x80333333);
         getWindow().setStatusBarColor(dragNavigation.calculateOverlayedColor(color));
         getWindow().setNavigationBarColor(color);
         masterLayout.setBackgroundColor(color);
+        itemScroll = new LinearLayout(this);
+        itemScroll.setOrientation(LinearLayout.VERTICAL);
+        itemScroll.setGravity(Gravity.CENTER);
+        itemScroll.setPadding(0, 15, 0, 0);
         scrollable = new LinearLayout(this);
         scrollable.setOrientation(LinearLayout.VERTICAL);
         scrollable.setGravity(Gravity.CENTER);
-        scrollable.setPadding(15, 15, 15, 15);
+        scrollable.setPadding(15, 0, 15, 15);
         scrollable.addView(new View(this), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dragNavigation.spacerSize()));
-        ScrollView sv = new ScrollView(this);
+        scrollable.addView(itemScroll);
+        final ScrollView sv = new ScrollView(this);
         sv.addView(scrollable);
         masterLayout.addView(sv);
         masterLayout.addView(dragNavigation);
@@ -391,20 +478,12 @@ public class Main extends Activity {
         actionsView.setOrientation(LinearLayout.VERTICAL);
         actionsView.setGravity(Gravity.CENTER);
         Button buttonNewConfig = new Button(this);
-        Button buttonChooseQS = new Button(this);
-        Button buttonChooseLP = new Button(this);
         Button buttonImportExport = new Button(this);
         buttonNewConfig.setBackground(null);
-        buttonChooseQS.setBackground(null);
-        buttonChooseLP.setBackground(null);
         buttonImportExport.setBackground(null);
-        buttonNewConfig.setText("New Configuration");
-        buttonChooseQS.setText("Choose QuickSettings");
-        buttonChooseLP.setText("Choose Shortcut");
-        buttonImportExport.setText("Import/Export");
+        buttonNewConfig.setText(R.string.new_configuration_long);
+        buttonImportExport.setText(R.string.text_import_export);
         actionsView.addView(buttonNewConfig);
-        actionsView.addView(buttonChooseQS);
-        actionsView.addView(buttonChooseLP);
         actionsView.addView(buttonImportExport);
         buttonNewConfig.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -412,16 +491,78 @@ public class Main extends Activity {
                 createConfiguration("");
             }
         });
+        buttonImportExport.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                popupIE();
+            }
+        });
         dragNavigation.setContent(actionsView);
+        initStageC();
+        setContentView(masterLayout);
+        sv.post(new Runnable() {
+            @Override
+            public void run() {
+                sv.fullScroll(View.FOCUS_UP);
+            }
+        });
+        remakeTaskDescription(dragNavigation.calculateOverlayedColor(color));
+    }
+
+    private void popupIE() {
+        AlertDialog.Builder ad = new AlertDialog.Builder(this);
+        ad.setTitle("Import / Export");
+        ad.setMessage("Would You Like To Import Or Export Configurations?");
+        ad.setPositiveButton("Export", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                share(getApplicationContext(), generateExport(), "Share Exported Configurations");
+            }
+        });
+        ad.setNegativeButton("Import", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                popupImport();
+            }
+        });
+        ad.show();
+    }
+
+    private void popupImport() {
+        AlertDialog.Builder alert = new AlertDialog.Builder(this);
+        alert.setTitle("Import From Text");
+        final EditText nameText = new EditText(this);
+        FrameLayout fl = new FrameLayout(this);
+        nameText.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        nameText.setHint("JSON Text Goes Here");
+        fl.addView(nameText);
+        fl.setPadding(15, 15, 15, 15);
+        alert.setView(fl);
+        alert.setPositiveButton("Import Configurations", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                importConfigurations(nameText.getText().toString());
+            }
+        });
+        alert.show();
+    }
+
+    private void initStageC() {
+        itemScroll.removeAllViews();
         final ArrayList<String> confs = new ArrayList<>();
         confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_INTERNET));
         confs.addAll(Main.getConfigurationsFromList(getApplicationContext(), Main.Configuration.TYPE_BLUETOOTH));
         SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
-        for (int c = 0; c < confs.size(); c++) {
+        guideText = getText("Pull The Icon Bar Down To Access The Menu");
+        itemScroll.addView(guideText);
+        guideText.setVisibility(View.GONE);
+        guideText.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (confs.size() == 0) {
+            guideText.setVisibility(View.VISIBLE);
+        }
+        for (int c = confs.size() - 1; c >= 0; c--) {
             addToListView(new Configuration(sp.getString(confs.get(c), "{}")));
         }
-        setContentView(masterLayout);
-        remakeTaskDescription();
     }
 
     @Override
@@ -439,7 +580,8 @@ public class Main extends Activity {
     }
 
     private void addToListView(Configuration c) {
-        ConfigurationView cv = new ConfigurationView(getApplicationContext(), c);
+        guideText.setVisibility(View.GONE);
+        final ConfigurationView cv = new ConfigurationView(getApplicationContext(), c);
         cv.setOnEdit(new ConfigurationView.OnPress() {
             @Override
             public void onPress(String conf) {
@@ -449,11 +591,17 @@ public class Main extends Activity {
         cv.setOnRemove(new ConfigurationView.OnPress() {
             @Override
             public void onPress(String conf) {
+                removeConfiguration(getApplicationContext(), conf);
+                cv.setVisibility(View.GONE);
             }
         });
         cv.setOnSetFavorite(new ConfigurationView.OnPress() {
             @Override
             public void onPress(String conf) {
+                SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+                sp.edit().putString(qs, conf).apply();
+                Toast.makeText(getApplicationContext(), "\"" + conf + "\" is now the favored configuration.", Toast.LENGTH_LONG).show();
+                Main.widgetTunnel.send("Favorite Configuration Changed.");
             }
         });
         cv.setOnRunDebug(new ConfigurationView.OnPress() {
@@ -463,21 +611,21 @@ public class Main extends Activity {
             }
         });
         cv.setLayoutParams(new LinearLayout.LayoutParams(Device.screenX(getApplicationContext()) - scrollable.getPaddingRight() - scrollable.getPaddingLeft(), Device.screenY(getApplicationContext()) / 2));
-        scrollable.addView(cv, 1);
+        itemScroll.addView(cv);
     }
 
-    private void runDebug(String conf){
-        Tunnel<String> mVerboser=new Tunnel<>();
-        Action a=new Action(getApplicationContext(),conf);
-        a.verboser=mVerboser;
-        AlertDialog.Builder ad=new AlertDialog.Builder(this);
+    private void runDebug(String conf) {
+        Tunnel<String> mVerboser = new Tunnel<>();
+        Action a = new Action(getApplicationContext(), conf);
+        a.verboser = mVerboser;
+        AlertDialog.Builder ad = new AlertDialog.Builder(this);
         ad.setTitle("Run In Debug");
-        final ScrollView sv=new ScrollView(this);
-        final TextView tv=new TextView(this);
-        tv.setPadding(20,20,20,20);
-        tv.setTextSize(textSize-7);
+        final ScrollView sv = new ScrollView(this);
+        final TextView tv = new TextView(this);
+        tv.setPadding(20, 20, 20, 20);
+        tv.setTextSize(textSize - 7);
         sv.addView(tv);
-        String init="Running Configuration '"+conf+"' In Debug";
+        String init = "Running Configuration '" + conf + "' In Debug";
         tv.setText(init);
         mVerboser.addReceiver(new Tunnel.OnTunnel<String>() {
             @Override
@@ -485,7 +633,7 @@ public class Main extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        String newText=tv.getText().toString()+"\n\n"+s+".";
+                        String newText = tv.getText().toString() + "\n\n" + s + ".";
                         tv.setText(newText);
                         sv.post(new Runnable() {
 
@@ -493,17 +641,17 @@ public class Main extends Activity {
                             public void run() {
                                 sv.fullScroll(View.FOCUS_DOWN);
                             }
-                        });                    }
+                        });
+                    }
                 });
-
             }
         });
         ad.setView(sv);
-        ad.setPositiveButton("Close",null);
+        ad.setPositiveButton("Close", null);
         ad.setNegativeButton("Share", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                share(getApplicationContext(),tv.getText().toString(),"Share Debug Log");
+                share(getApplicationContext(), tv.getText().toString(), "Share Debug Log");
             }
         });
         ad.show();
@@ -518,6 +666,7 @@ public class Main extends Activity {
         AlertDialog.Builder alert = new AlertDialog.Builder(this);
         alert.setTitle("New Configuration");
         final EditText nameText = new EditText(this);
+        nameText.setHint("Configuration's Name");
         FrameLayout fl = new FrameLayout(this);
         nameText.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         nameText.setText(name);
@@ -571,6 +720,65 @@ public class Main extends Activity {
                     Toast.makeText(getApplicationContext(), "Cannot Create Configuration With An Empty Name!", Toast.LENGTH_LONG).show();
                     createConfiguration("");
                 }
+            }
+        });
+        alert.setNeutralButton("Import From Text", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                if (nameText.getText().toString().length() != 0) {
+                    if (!confs.contains(nameText.getText().toString())) {
+                        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+                        configuration.setValue(Configuration.type, Configuration.TYPE_INTERNET);
+                        configuration.setValue(Configuration.name, nameText.getText().toString());
+                        sp.edit().putString(nameText.getText().toString(), configuration.getConfiguration()).apply();
+                        addConfigurationToList(getApplicationContext(), Configuration.TYPE_INTERNET, nameText.getText().toString());
+                        addToListView(configuration);
+                        createFromText(nameText.getText().toString());
+                    } else {
+                        Toast.makeText(getApplicationContext(), "Cannot Create Configuration;\nA Configuration Named \"" + nameText.getText().toString() + "\" Is Already Available.", Toast.LENGTH_LONG).show();
+                        createConfiguration("");
+                    }
+                } else {
+                    Toast.makeText(getApplicationContext(), "Cannot Create Configuration With An Empty Name!", Toast.LENGTH_LONG).show();
+                    createConfiguration("");
+                }
+            }
+        });
+        alert.show();
+    }
+
+    private void createFromText(final String name) {
+        AlertDialog.Builder alert = new AlertDialog.Builder(this);
+        alert.setTitle("Import From Text");
+        final EditText nameText = new EditText(this);
+        FrameLayout fl = new FrameLayout(this);
+        nameText.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        nameText.setHint("JSON Text Goes Here");
+        fl.addView(nameText);
+        fl.setPadding(15, 15, 15, 15);
+        alert.setView(fl);
+        alert.setPositiveButton("Load Settings", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                try {
+                    JSONObject object = new JSONObject(nameText.getText().toString());
+                    if (object.has(Configuration.type)) {
+                        final Configuration configuration = new Configuration(nameText.getText().toString());
+                        configuration.setValue(Configuration.name, name);
+                        SharedPreferences sp = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+                        sp.edit().putString(name, configuration.getConfiguration()).apply();
+                        Main.configurationChangeTunnel.send(generateConfigurations());
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    editConfiguration(name);
+                }
+            }
+        });
+        alert.setNegativeButton("Just Edit", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                editConfiguration(name);
             }
         });
         alert.show();
@@ -968,6 +1176,7 @@ public class Main extends Activity {
         Context c;
         String config;
         Tunnel<String> verboser;
+
         public Action(Context c, String configurationName) {
             this.c = c;
             config = configurationName;
@@ -1126,7 +1335,7 @@ public class Main extends Activity {
                 right.setLayoutParams(lp);
                 if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_INTERNET) {
                     initStageEInternet();
-                }else{
+                } else {
                     initStageEBluetooth();
                 }
             }
@@ -1171,7 +1380,7 @@ public class Main extends Activity {
             bottomButtons = new LinearLayout(getContext());
             bottomButtons.setGravity(Gravity.CENTER);
             bottomButtons.setOrientation(LinearLayout.HORIZONTAL);
-            ImageButton share, delete, setqs, edit,rundebug, flow;
+            ImageButton share, delete, setqs, edit, rundebug, flow;
             share = new ImageButton(getContext());
             edit = new ImageButton(getContext());
             flow = new ImageButton(getContext());
@@ -1215,7 +1424,7 @@ public class Main extends Activity {
             share.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    Main.share(getContext(),configuration.getConfiguration(),"Share Configuration As JSON");
+                    Main.share(getContext(), configuration.getConfiguration(), "Share Configuration As JSON");
                 }
             });
             flow.setOnClickListener(new OnClickListener() {
@@ -1234,19 +1443,22 @@ public class Main extends Activity {
             setqs.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    if(onSetFavorite!=null)onSetFavorite.onPress(configuration.getValue(Configuration.name, null));
+                    if (onSetFavorite != null)
+                        onSetFavorite.onPress(configuration.getValue(Configuration.name, null));
                 }
             });
             delete.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    if(onRemove!=null)onRemove.onPress(configuration.getValue(Configuration.name, null));
+                    if (onRemove != null)
+                        onRemove.onPress(configuration.getValue(Configuration.name, null));
                 }
             });
             rundebug.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    if(onRunDebug!=null)onRunDebug.onPress(configuration.getValue(Configuration.name, null));
+                    if (onRunDebug != null)
+                        onRunDebug.onPress(configuration.getValue(Configuration.name, null));
                 }
             });
             bottomButtons.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, size + bottomButtons.getPaddingTop() + bottomButtons.getPaddingBottom()));
@@ -1276,6 +1488,7 @@ public class Main extends Activity {
         public void setOnSetFavorite(OnPress onSet) {
             this.onSetFavorite = onSet;
         }
+
         public void setOnRunDebug(OnPress onSet) {
             this.onRunDebug = onSet;
         }
@@ -1297,7 +1510,7 @@ public class Main extends Activity {
             deviceName.setText(deviceNameText);
             String deviceMacText = "Device MAC: " + configuration.getValue(Configuration.deviceAddress, "No Mac");
             deviceMac.setText(deviceMacText);
-            String dataTypeText="Data-Type: "+configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).substring(0, 1).toUpperCase() + configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).substring(1);
+            String dataTypeText = "Data-Type: " + configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).substring(0, 1).toUpperCase() + configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).substring(1);
             dataType.setText(dataTypeText);
             left.addView(deviceName);
             left.addView(dataType);
@@ -1343,9 +1556,9 @@ public class Main extends Activity {
             dataTable.setPadding(5, 5, 5, 5);
         }
 
-        private void initStageEBluetooth(){
+        private void initStageEBluetooth() {
             right.removeAllViews();
-            if(configuration.getValue(Configuration.bluetoothEncoding,Configuration.ENCODING_BLUETOOTH_JSON).equals(Configuration.ENCODING_BLUETOOTH_JSON)){
+            if (configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).equals(Configuration.ENCODING_BLUETOOTH_JSON)) {
                 int size = right.getLayoutParams().width / 2;
                 String[] titles = new String[]{"Name", "Value"};
                 Table dataTable;
@@ -1356,7 +1569,7 @@ public class Main extends Activity {
                 }
                 right.addView(dataTable);
                 dataTable.setPadding(5, 5, 5, 5);
-            }else {
+            } else {
                 TextView dataTitle = new TextView(getContext());
                 dataTitle.setGravity(Gravity.CENTER);
                 dataTitle.setTextSize(25);
@@ -1769,7 +1982,7 @@ public class Main extends Activity {
                 verbose("Getting Saved Data");
                 sending = configuration.getValue(Configuration.data, "");
             }
-            verbose("Text To Send: "+sending);
+            verbose("Text To Send: " + sending);
             if (manager != null) {
                 verbose("Bluetooth Permission Granted");
                 blueAdapter = manager.getAdapter();
@@ -1780,7 +1993,7 @@ public class Main extends Activity {
                         verbose("Device Name Found");
                         final BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.deviceAddress, ""));
                         UUID uuid = device.getUuids()[0].getUuid();
-                        verbose("Device UUID: "+uuid.toString());
+                        verbose("Device UUID: " + uuid.toString());
                         try {
                             verbose("Trying To Create Socket");
                             final BluetoothSocket socket = device.createRfcommSocketToServiceRecord(uuid);
@@ -1824,7 +2037,7 @@ public class Main extends Activity {
                     verbose("Operation Could Not Begin, Bluetooth Is Off");
                     returnStatus.status = Main.Status.STATUS_FAILED;
                 }
-            }else{
+            } else {
                 verbose("Bluetooth Permission Not Granted");
             }
             verbose("Done");
@@ -1837,8 +2050,8 @@ public class Main extends Activity {
             if (onSessionEnd != null) onSessionEnd.onSessionEnd(status);
         }
 
-        private void verbose(String s){
-            if(action.verboser!=null)action.verboser.send(s);
+        private void verbose(String s) {
+            if (action.verboser != null) action.verboser.send(s);
         }
 
         public interface OnSessionEnd {
