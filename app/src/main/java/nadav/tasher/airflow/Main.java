@@ -105,11 +105,20 @@ public class Main extends Activity {
             }
         });
         internetTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
+
+            Action action;
+
+            private void verbose(String s){
+                if(action.verboser!=null)action.verboser.send(s);
+            }
+
             @Override
             public void onReceive(final Action action) {
+                this.action=action;
                 SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
                 final Configuration configuration = new Configuration(sp.getString(action.config, "{}"));
                 Net.Request.RequestParameter[] parms;
+                verbose("Trying To Parse Parameters");
                 try {
                     JSONArray requestParms = new JSONArray(configuration.getValue(Configuration.requestParameters, "[]"));
                     parms = new Net.Request.RequestParameter[requestParms.length()];
@@ -117,41 +126,78 @@ public class Main extends Activity {
                         JSONObject jo = new JSONObject(requestParms.getString(rp));
                         parms[rp] = new Net.Request.RequestParameter(jo.getString("name"), jo.getString("value"));
                     }
+                    verbose("Parameters Parsed");
                 } catch (JSONException e) {
                     e.printStackTrace();
+                    verbose("Failed Parsing Parameters, Running With None");
                     parms = new Net.Request.RequestParameter[0];
                 }
                 if (configuration.getValue(Configuration.method, Configuration.METHOD_INTERNET_GET).equals(Configuration.METHOD_INTERNET_GET)) {
-                    new Net.Request.Get(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
+                    verbose("Creating AsyncTask");
+                    Net.Request.Get request=new Net.Request.Get(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
                         @Override
                         public void onRequest(String s) {
-                            if (configuration.getValue(Configuration.displayOutput, false)) {
-                                Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
-                            } else {
-                                if (s == null) {
-                                    Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                            if(action.verboser==null) {
+                                if (configuration.getValue(Configuration.displayOutput, false)) {
+                                    Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
                                 } else {
-                                    Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                    if (s == null) {
+                                        Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                                    } else {
+                                        Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                    }
                                 }
+                            }else{
+                                verbose("Operation Succeeded, Result:\n\""+s+"\"");
                             }
                         }
-                    }).execute();
+                    });
+                    verbose("AsyncTask Created");
+                    verbose("Checking Network State");
+                    if(Device.isOnline(action.c)){
+                        verbose("Device Is Online");
+                        verbose("Running AsyncTask");
+                        request.execute();
+                    }else{
+                        verbose("Device Offline, Canceling Execution");
+                        verbose("Operation Failed");
+                        if(action.verboser==null)
+                        Toast.makeText(action.c, "Device Offline.", Toast.LENGTH_LONG).show();
+                    }
                 } else {
-                    new Net.Request.Post(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
+                    verbose("Creating AsyncTask");
+                    Net.Request.Post request=new Net.Request.Post(configuration.getValue(Configuration.urlBase, "") + ":" + configuration.getValue(Configuration.port, 80) + configuration.getValue(Configuration.urlPath, "/"), parms, new Net.Request.OnRequest() {
                         @Override
                         public void onRequest(String s) {
-                            if (configuration.getValue(Configuration.displayOutput, false)) {
-                                Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
-                            } else {
-                                if (s == null) {
-                                    Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                            if(action.verboser==null) {
+                                if (configuration.getValue(Configuration.displayOutput, false)) {
+                                    Toast.makeText(action.c, s, Toast.LENGTH_LONG).show();
                                 } else {
-                                    Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                    if (s == null) {
+                                        Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                                    } else {
+                                        Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                    }
                                 }
+                            }else{
+                                verbose("Operation Succeeded, Result:\n\""+s+"\"");
                             }
                         }
-                    }).execute();
+                    });
+                    verbose("AsyncTask Created");
+                    verbose("Checking Network State");
+                    if(Device.isOnline(action.c)){
+                        verbose("Device Is Online");
+                        verbose("Running AsyncTask");
+                        request.execute();
+                    }else{
+                        verbose("Device Offline, Canceling Execution");
+                        verbose("Operation Failed");
+                        if(action.verboser==null)
+                            Toast.makeText(action.c, "Device Offline.", Toast.LENGTH_LONG).show();
+                    }
                 }
+                verbose("Done");
             }
         });
         activateTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
@@ -249,6 +295,14 @@ public class Main extends Activity {
             e.printStackTrace();
             return null;
         }
+    }
+
+    static void share(Context c,String text,String title){
+        Intent sharingIntent = new Intent(android.content.Intent.ACTION_SEND);
+        sharingIntent.setType("text/*");
+        sharingIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, title);
+        sharingIntent.putExtra(android.content.Intent.EXTRA_TEXT, text);
+        c.startActivity(Intent.createChooser(sharingIntent,title));
     }
 
     @Override
@@ -386,14 +440,74 @@ public class Main extends Activity {
 
     private void addToListView(Configuration c) {
         ConfigurationView cv = new ConfigurationView(getApplicationContext(), c);
-        cv.setOnEdit(new ConfigurationView.OnEdit() {
+        cv.setOnEdit(new ConfigurationView.OnPress() {
             @Override
-            public void onEdit(String conf) {
+            public void onPress(String conf) {
                 editConfiguration(conf);
+            }
+        });
+        cv.setOnRemove(new ConfigurationView.OnPress() {
+            @Override
+            public void onPress(String conf) {
+            }
+        });
+        cv.setOnSetFavorite(new ConfigurationView.OnPress() {
+            @Override
+            public void onPress(String conf) {
+            }
+        });
+        cv.setOnRunDebug(new ConfigurationView.OnPress() {
+            @Override
+            public void onPress(String conf) {
+                runDebug(conf);
             }
         });
         cv.setLayoutParams(new LinearLayout.LayoutParams(Device.screenX(getApplicationContext()) - scrollable.getPaddingRight() - scrollable.getPaddingLeft(), Device.screenY(getApplicationContext()) / 2));
         scrollable.addView(cv, 1);
+    }
+
+    private void runDebug(String conf){
+        Tunnel<String> mVerboser=new Tunnel<>();
+        Action a=new Action(getApplicationContext(),conf);
+        a.verboser=mVerboser;
+        AlertDialog.Builder ad=new AlertDialog.Builder(this);
+        ad.setTitle("Run In Debug");
+        final ScrollView sv=new ScrollView(this);
+        final TextView tv=new TextView(this);
+        tv.setPadding(20,20,20,20);
+        tv.setTextSize(textSize-7);
+        sv.addView(tv);
+        String init="Running Configuration '"+conf+"' In Debug";
+        tv.setText(init);
+        mVerboser.addReceiver(new Tunnel.OnTunnel<String>() {
+            @Override
+            public void onReceive(final String s) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        String newText=tv.getText().toString()+"\n\n"+s+".";
+                        tv.setText(newText);
+                        sv.post(new Runnable() {
+
+                            @Override
+                            public void run() {
+                                sv.fullScroll(View.FOCUS_DOWN);
+                            }
+                        });                    }
+                });
+
+            }
+        });
+        ad.setView(sv);
+        ad.setPositiveButton("Close",null);
+        ad.setNegativeButton("Share", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                share(getApplicationContext(),tv.getText().toString(),"Share Debug Log");
+            }
+        });
+        ad.show();
+        Main.activateTunnel.send(a);
     }
 
     private void createConfiguration(String name) {
@@ -499,6 +613,21 @@ public class Main extends Activity {
         titleText.setText(configuration.getValue(Configuration.title, ""));
         all.addView(titleText);
         if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_BLUETOOTH) {
+            RadioGroup encodingType = new RadioGroup(this);
+            all.addView(getText("Select Data Type:"));
+            all.addView(encodingType);
+            RadioButton typeJson = new RadioButton(this);
+            RadioButton typeText = new RadioButton(this);
+            typeJson.setText(R.string.type_json);
+            typeText.setText(R.string.type_text);
+            typeJson.setGravity(Gravity.CENTER);
+            typeText.setGravity(Gravity.CENTER);
+            typeJson.setTextSize(textSize);
+            typeText.setTextSize(textSize);
+            typeJson.setTextColor(0xffffffff);
+            typeText.setTextColor(0xffffffff);
+            encodingType.addView(typeJson);
+            encodingType.addView(typeText);
             final EditText bluetoothDataText = new EditText(this);
             bluetoothDataText.setHint("String To Send Over Bluetooth");
             bluetoothDataText.setText(configuration.getValue(Configuration.data, ""));
@@ -524,8 +653,55 @@ public class Main extends Activity {
                 public void afterTextChanged(Editable s) {
                 }
             });
+            int size = ((int) (Device.screenX(getApplicationContext()) / 2.5));
+            String[] titles = new String[]{"Name", "Value"};
+            Table bluetoothJsonTableCreate;
+            try {
+                bluetoothJsonTableCreate = new Table(this, size, Table.MODE_RW, new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]")), titles);
+            } catch (JSONException e) {
+                bluetoothJsonTableCreate = new Table(this, size, Table.MODE_RW, new JSONArray(), titles);
+            }
+            final Table bluetoothJsonTable = bluetoothJsonTableCreate;
+            bluetoothJsonTable.setPadding(15, 15, 15, 15);
+            bluetoothJsonTable.setShowRemoveButton(true, size / 4);
+            bluetoothJsonTable.setOnChanged(new Table.OnChanged() {
+                @Override
+                public void onChanged(JSONArray nowData) {
+                    configuration.setValue(Configuration.bluetoothJSONParameters, nowData.toString());
+                }
+            });
+            typeJson.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    if (isChecked) {
+                        configuration.setValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON);
+                        bluetoothJsonTable.setVisibility(View.VISIBLE);
+                        bluetoothDataText.setVisibility(View.GONE);
+                    }
+                }
+            });
+            typeText.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    if (isChecked) {
+                        configuration.setValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_TEXT);
+                        bluetoothDataText.setVisibility(View.VISIBLE);
+                        bluetoothJsonTable.setVisibility(View.GONE);
+                    }
+                }
+            });
+            if (configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).equals(Configuration.ENCODING_BLUETOOTH_JSON)) {
+                typeJson.setChecked(true);
+                bluetoothJsonTable.setVisibility(View.VISIBLE);
+                bluetoothDataText.setVisibility(View.GONE);
+            } else {
+                typeText.setChecked(true);
+                bluetoothDataText.setVisibility(View.VISIBLE);
+                bluetoothJsonTable.setVisibility(View.GONE);
+            }
             all.addView(getText("Data:"));
             all.addView(bluetoothDataText);
+            all.addView(bluetoothJsonTable);
             final TextView uuidText = getText("(Device Address)");
             RadioGroup deviceName = new RadioGroup(this);
             all.addView(getText("Select Device:"));
@@ -533,11 +709,11 @@ public class Main extends Activity {
             all.addView(uuidText);
             ArrayList<BluetoothDevice> pairedDevices = new ArrayList<>(Arrays.asList(bluetoothAdapter.getBondedDevices().toArray(new BluetoothDevice[bluetoothAdapter.getBondedDevices().size()])));
             for (int p = 0; p < pairedDevices.size(); p++) {
-                final RadioButton device = new RadioButton(getApplicationContext());
+                final RadioButton device = new RadioButton(this);
                 final String devName = pairedDevices.get(p).getName();
                 final String devAddress = pairedDevices.get(p).getAddress();
                 device.setText(devName);
-                device.setTextColor(Color.WHITE);
+                device.setTextColor(0xffffffff);
                 device.setTextSize(textSize);
                 device.setGravity(Gravity.CENTER);
                 device.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -553,10 +729,10 @@ public class Main extends Activity {
                 });
                 deviceName.addView(device);
                 if (p == 0 && configuration.getValue(Configuration.deviceName, null) == null) {
-                    device.toggle();
+                    device.setChecked(true);
                 }
                 if (devName.equals(configuration.getValue(Configuration.deviceName, ""))) {
-                    device.toggle();
+                    device.setChecked(true);
                 }
             }
         } else {
@@ -566,8 +742,8 @@ public class Main extends Activity {
             RadioGroup method = new RadioGroup(this);
             RadioButton post = new RadioButton(this);
             RadioButton get = new RadioButton(this);
-            post.setText("(HTTP[/S]) Post");
-            get.setText("(HTTP[/S]) Get");
+            post.setText(R.string.text_post);
+            get.setText(R.string.text_get);
             post.setGravity(Gravity.CENTER);
             get.setGravity(Gravity.CENTER);
             method.addView(post);
@@ -768,284 +944,6 @@ public class Main extends Activity {
         }
         return allConfs;
     }
-    //    void newBlueConfig() {
-    //        selected_name = null;
-    //        selected_address = null;
-    //        final SharedPreferences sp = getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-    //        AlertDialog.Builder alert = new AlertDialog.Builder(this);
-    //        alert.setTitle("Create Configuration");
-    //        LinearLayout ll = new LinearLayout(this);
-    //        ll.setOrientation(LinearLayout.VERTICAL);
-    //        ll.setGravity(Gravity.CENTER_HORIZONTAL);
-    //        final EditText text = new EditText(this);
-    //        text.setHint("What's Written On Your Widget");
-    //        String t = "Send Data " + (new Random().nextInt(100) + 100);
-    //        text.setText(t);
-    //        final EditText data = new EditText(this);
-    //        data.setHint("Data");
-    //        ll.addView(text);
-    //        ll.addView(data);
-    //        ll.addView(getS(datas, data));
-    //        BluetoothManager manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-    //        BluetoothAdapter blueAdapter = manager.getAdapter();
-    //        if (blueAdapter.isEnabled()) {
-    //            RadioGroup grp = new RadioGroup(this);
-    //            final BluetoothDevice[] bondedDevices = blueAdapter.getBondedDevices().toArray(new BluetoothDevice[blueAdapter.getBondedDevices().size()]);
-    //            for (int i = 0; i < bondedDevices.length; i++) {
-    //                RadioButton rb = new RadioButton(this);
-    //                rb.setText(bondedDevices[i].getName());
-    //                final int fi = i;
-    //                rb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-    //                    @Override
-    //                    public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-    //                        if (b) {
-    //                            selected_address = bondedDevices[fi].getAddress();
-    //                            selected_name = bondedDevices[fi].getName();
-    //                        }
-    //                    }
-    //                });
-    //                grp.addView(rb);
-    //            }
-    //            ll.addView(grp);
-    //        } else {
-    //            Toast.makeText(this, "Turn on Bluetooth", Toast.LENGTH_SHORT).show();
-    //        }
-    //        alert.setView(ll);
-    //        alert.setPositiveButton("Save", new DialogInterface.OnClickListener() {
-    //            @Override
-    //            public void onClick(DialogInterface dialogInterface, int i) {
-    //                String con = Stringer.replaceEvery(text.getText().toString().toLowerCase(), ' ', '_');
-    //                ArrayList<String> widgets = Stringer.cutOnEvery(sp.getString("widgets", null), "!!");
-    //                if (widgets == null) {
-    //                    widgets = new ArrayList<>();
-    //                }
-    //                widgets.add(con);
-    //                String finale = "";
-    //                for (int s = 0; s < widgets.size(); s++) {
-    //                    if (finale.equals("")) {
-    //                        finale = finale + widgets.get(s);
-    //                    } else {
-    //                        finale = finale + "!!" + widgets.get(s);
-    //                    }
-    //                }
-    //                sp.edit().putString("widgets", finale).apply();
-    //                if (!text.getText().toString().equals("")) {
-    //                    sp.edit().putString(con + ptext, text.getText().toString()).apply();
-    //                }
-    //                sp.edit().putString(con + pdata, data.getText().toString()).apply();
-    //                if (selected_address != null && selected_name != null) {
-    //                    sp.edit().putString(con + pbaddress, selected_address).apply();
-    //                    sp.edit().putString(con + pdevname, selected_name).apply();
-    //                }
-    //                FileFactory.log(log, "Configuration " + con + " Created");
-    //                doStart();
-    //            }
-    //        });
-    //        alert.show();
-    //    }
-    //
-    //    void newNetConfig() {
-    //        final SharedPreferences sp = getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-    //        AlertDialog.Builder alert = new AlertDialog.Builder(this);
-    //        alert.setTitle("Create Configuration");
-    //        LinearLayout ll = new LinearLayout(this);
-    //        ll.setOrientation(LinearLayout.VERTICAL);
-    //        ll.setGravity(Gravity.CENTER_HORIZONTAL);
-    //        final EditText text = new EditText(this);
-    //        text.setHint("What's Written On Your Widget");
-    //        String t = "Send Data " + new Random().nextInt(100);
-    //        text.setText(t);
-    //        final EditText url = new EditText(this);
-    //        url.setHint("Your URL");
-    //        final EditText port = new EditText(this);
-    //        port.setHint("URL:port");
-    //        port.setText(getString(R.string.defport));
-    //        final EditText comm = new EditText(this);
-    //        comm.setHint("Command To Send");
-    //        final EditText cgif = new EditText(this);
-    //        cgif.setHint("CGI File");
-    //        ll.addView(text);
-    //        ll.addView(url);
-    //        ll.addView(getS(urls, url));
-    //        ll.addView(port);
-    //        ll.addView(getS(ports, port));
-    //        ll.addView(cgif);
-    //        ll.addView(getS(cgis, cgif));
-    //        ll.addView(comm);
-    //        ll.addView(getS(commands, comm));
-    //        alert.setView(ll);
-    //        alert.setPositiveButton("Save", new DialogInterface.OnClickListener() {
-    //            @Override
-    //            public void onClick(DialogInterface dialogInterface, int i) {
-    //                String con = Stringer.replaceEvery(text.getText().toString().toLowerCase(), ' ', '_');
-    //                ArrayList<String> widgets = Stringer.cutOnEvery(sp.getString("widgets", null), "!!");
-    //                if (widgets == null) {
-    //                    widgets = new ArrayList<>();
-    //                }
-    //                widgets.add(con);
-    //                String finale = "";
-    //                for (int s = 0; s < widgets.size(); s++) {
-    //                    if (finale.equals("")) {
-    //                        finale = finale + widgets.get(s);
-    //                    } else {
-    //                        finale = finale + "!!" + widgets.get(s);
-    //                    }
-    //                }
-    //                sp.edit().putString("widgets", finale).apply();
-    //                if (!text.getText().toString().equals("")) {
-    //                    sp.edit().putString(con + ptext, text.getText().toString()).apply();
-    //                }
-    //                if (!cgif.getText().toString().equals("")) {
-    //                    sp.edit().putString(con + pcgi, cgif.getText().toString()).apply();
-    //                    addToList(cgis, cgif.getText().toString());
-    //                }
-    //                if (!url.getText().toString().equals("")) {
-    //                    sp.edit().putString(con + purl, url.getText().toString()).apply();
-    //                    addToList(urls, url.getText().toString());
-    //                }
-    //                if (!port.getText().toString().equals("")) {
-    //                    sp.edit().putString(con + pport, port.getText().toString()).apply();
-    //                    addToList(ports, port.getText().toString());
-    //                }
-    //                if (!comm.getText().toString().equals("")) {
-    //                    sp.edit().putString(con + pcomm, comm.getText().toString()).apply();
-    //                    addToList(commands, comm.getText().toString());
-    //                }
-    //                FileFactory.log(log, "Configuration " + con + " Created");
-    //                doStart();
-    //            }
-    //        });
-    //        alert.show();
-    //    }
-    //
-    //    void export() {
-    //        Toast.makeText(this, "File will be ready under " + new File(cache, "widgets.xml").toString(), Toast.LENGTH_LONG).show();
-    //        FileFactory.log(log, "Export Main");
-    //        SharedPreferences sp = getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-    //        ArrayList<String> widgets;
-    //        if (sp.getString("widgets", "").contains("::")) {
-    //            widgets = Stringer.cutOnEvery(sp.getString("widgets", null), "::");
-    //        } else {
-    //            widgets = new ArrayList<>();
-    //            widgets.add(sp.getString("widgets", null));
-    //        }
-    //        String s = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
-    //        for (int w = 0; w < widgets.size(); w++) {
-    //            if (sp.contains(widgets.get(w) + pdata)) {
-    //                s = s + "\n" + "<widget_blue>" + widgets.get(w) + "::" + sp.getString(widgets.get(w) + ptext, "none") + "::" + sp.getString(widgets.get(w) + pdata, "none") + "::" + sp.getString(widgets.get(w) + pbaddress, "none") + "::" + sp.getString(widgets.get(w) + pdevname, "none") + "::" + sp.getInt(widgets.get(w) + pcolor, Color.parseColor(colorstart)) + "</widget_blue>";
-    //            } else {
-    //                s = s + "\n" + "<widget>" + widgets.get(w) + "::" + sp.getString(widgets.get(w) + ptext, "none") + "::" + sp.getString(widgets.get(w) + purl, "none") + "::" + sp.getString(widgets.get(w) + pport, "80") + "::" + sp.getString(widgets.get(w) + pcgi, "none") + "::" + sp.getString(widgets.get(w) + pcomm, "none") + "::" + sp.getInt(widgets.get(w) + pcolor, Color.parseColor(colorstart)) + "</widget>";
-    //            }
-    //        }
-    //        FileFactory.writeToFile(new File(cache, "widgets.xml"), s);
-    //        FileFactory.log(log, "Export Finished");
-    //    }
-    //
-    //    void importXML() {
-    //        final SharedPreferences sp = getSharedPreferences(getPackageName() + "_PREFS", MODE_PRIVATE);
-    //        AlertDialog.Builder alert = new AlertDialog.Builder(this);
-    //        alert.setTitle("Import");
-    //        alert.setMessage("Make Sure You Have Your 'widgets.xml'\nImport File Ready In " + cache.toString() + ".\nDo You Want To Continue?\nThis Will NOT Overwrite Any Existing\nConfigurations With These Names.");
-    //        alert.setPositiveButton("Import", new DialogInterface.OnClickListener() {
-    //            @Override
-    //            public void onClick(DialogInterface dialogInterface, int i) {
-    //                if (new File(cache, "widgets.xml").exists()) {
-    //                    FileFactory.log(log, "Import Main");
-    //                    ArrayList<XMLFactory.XMLTag> widgets = XMLFactory.read(getApplicationContext(), new File(cache, "widgets.xml"), null, XMLFactory.INTERNAL_STORAGE);
-    //                    if (widgets != null) {
-    //                        for (int w = 0; w < widgets.size(); w++) {
-    //                            ArrayList<String> datas = Stringer.cutOnEvery(widgets.get(w).data, "::");
-    //                            String name, text, url, port, cgi, command, color, data, address, devname;
-    //                            if (datas.size() == 7) {
-    //                                ArrayList<String> widgets2 = Stringer.cutOnEvery(sp.getString("widgets", null), "::");
-    //                                if (widgets2 == null) {
-    //                                    widgets2 = new ArrayList<>();
-    //                                }
-    //                                name = datas.get(0);
-    //                                for (int wd = 0; wd < widgets2.size(); wd++) {
-    //                                    if (widgets2.get(wd).equals(name)) {
-    //                                        name = name + "_" + new Random().nextInt(1000);
-    //                                        break;
-    //                                    }
-    //                                }
-    //                                text = datas.get(1);
-    //                                url = datas.get(2);
-    //                                port = datas.get(3);
-    //                                cgi = datas.get(4);
-    //                                command = datas.get(5);
-    //                                color = datas.get(6);
-    //                                FileFactory.log(log, "Import: \n" + name + "\n" + text + "\n" + url + "\n" + port + "\n" + cgi + "\n" + command);
-    //                                sp.edit().putString(name + ptext, text).apply();
-    //                                sp.edit().putString(name + purl, url).apply();
-    //                                sp.edit().putString(name + pport, port).apply();
-    //                                sp.edit().putString(name + pcgi, cgi).apply();
-    //                                sp.edit().putString(name + pcomm, command).apply();
-    //                                sp.edit().putInt(name + pcolor, Integer.parseInt(color)).apply();
-    //                                addToList(urls, url);
-    //                                addToList(ports, port);
-    //                                addToList(cgis, cgi);
-    //                                addToList(commands, command);
-    //                                widgets2.add(name);
-    //                                String finale = "";
-    //                                for (int s = 0; s < widgets2.size(); s++) {
-    //                                    if (finale.equals("")) {
-    //                                        finale = finale + widgets2.get(s);
-    //                                    } else {
-    //                                        finale = finale + "::" + widgets2.get(s);
-    //                                    }
-    //                                }
-    //                                sp.edit().putString("widgets", finale).apply();
-    //                            } else if (datas.size() == 6) {
-    //                                ArrayList<String> widgets2 = Stringer.cutOnEvery(sp.getString("widgets", null), "::");
-    //                                if (widgets2 == null) {
-    //                                    widgets2 = new ArrayList<>();
-    //                                }
-    //                                name = datas.get(0);
-    //                                for (int wd = 0; wd < widgets2.size(); wd++) {
-    //                                    if (widgets2.get(wd).equals(name)) {
-    //                                        name = name + "_" + new Random().nextInt(1000);
-    //                                        break;
-    //                                    }
-    //                                }
-    //                                text = datas.get(1);
-    //                                data = datas.get(2);
-    //                                address = datas.get(3);
-    //                                devname = datas.get(4);
-    //                                color = datas.get(5);
-    //                                FileFactory.log(log, "Import: \n" + name + "\n" + text + "\n" + data + "\n" + address + "\n" + devname);
-    //                                sp.edit().putString(name + ptext, text).apply();
-    //                                sp.edit().putString(name + pdata, data).apply();
-    //                                sp.edit().putString(name + pbaddress, address).apply();
-    //                                sp.edit().putString(name + pdevname, devname).apply();
-    //                                sp.edit().putInt(name + pcolor, Integer.parseInt(color)).apply();
-    //                                addToList(Main.datas, data);
-    //                                widgets2.add(name);
-    //                                String finale = "";
-    //                                for (int s = 0; s < widgets2.size(); s++) {
-    //                                    if (finale.equals("")) {
-    //                                        finale = finale + widgets2.get(s);
-    //                                    } else {
-    //                                        finale = finale + "::" + widgets2.get(s);
-    //                                    }
-    //                                }
-    //                                sp.edit().putString("widgets", finale).apply();
-    //                            } else {
-    //                                FileFactory.log(log, "Widget Import Failed");
-    //                                Toast.makeText(getApplicationContext(), "Failed To Import Widget", Toast.LENGTH_SHORT).show();
-    //                            }
-    //                        }
-    //                    } else {
-    //                        FileFactory.log(log, "Import Failed");
-    //                    }
-    //                } else {
-    //                    Toast.makeText(getApplicationContext(), "File Not Available", Toast.LENGTH_SHORT).show();
-    //                }
-    //                doStart();
-    //            }
-    //        });
-    //        alert.setNegativeButton("Cancel", null);
-    //        alert.show();
-    //    }
 
     static class Status {
         static final int STATUS_STARTING = 0;
@@ -1069,7 +967,7 @@ public class Main extends Activity {
     static class Action {
         Context c;
         String config;
-
+        Tunnel<String> verboser;
         public Action(Context c, String configurationName) {
             this.c = c;
             config = configurationName;
@@ -1081,6 +979,8 @@ public class Main extends Activity {
         static final int TYPE_INTERNET = 0;
         static final String METHOD_INTERNET_POST = "post";
         static final String METHOD_INTERNET_GET = "get";
+        static final String ENCODING_BLUETOOTH_TEXT = "text";
+        static final String ENCODING_BLUETOOTH_JSON = "json";
         static final String urlBase = "internet_address_base";
         static final String urlPath = "internet_address_path";
         static final String type = "type";
@@ -1090,8 +990,9 @@ public class Main extends Activity {
         static final String deviceAddress = "bluetooth_uuid";
         static final String backgroundColor = "back_color";
         static final String textColor = "text_color";
-        static final String file = "internet_file";
         static final String method = "internet_method";
+        static final String bluetoothEncoding = "bluetooth_encoding";
+        static final String bluetoothJSONParameters = "bluetooth_json_parameters";
         static final String requestParameters = "internet_parameters";
         static final String displayOutput = "internet_display_output";
         static final String count = "uses";
@@ -1181,9 +1082,12 @@ public class Main extends Activity {
 
         Configuration configuration;
         LinearLayout bottomButtons, divider, left, right;
-        OnEdit onEdit = null;
+        OnPress onEdit = null;
+        OnPress onRemove = null;
+        OnPress onSetFavorite = null;
+        OnPress onRunDebug = null;
 
-        public ConfigurationView(Context c){
+        public ConfigurationView(Context c) {
             super(c);
         }
 
@@ -1222,6 +1126,8 @@ public class Main extends Activity {
                 right.setLayoutParams(lp);
                 if (configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH) == Configuration.TYPE_INTERNET) {
                     initStageEInternet();
+                }else{
+                    initStageEBluetooth();
                 }
             }
         }
@@ -1265,29 +1171,53 @@ public class Main extends Activity {
             bottomButtons = new LinearLayout(getContext());
             bottomButtons.setGravity(Gravity.CENTER);
             bottomButtons.setOrientation(LinearLayout.HORIZONTAL);
-            ImageButton share, edit, flow;
+            ImageButton share, delete, setqs, edit,rundebug, flow;
             share = new ImageButton(getContext());
             edit = new ImageButton(getContext());
             flow = new ImageButton(getContext());
+            delete = new ImageButton(getContext());
+            setqs = new ImageButton(getContext());
+            rundebug = new ImageButton(getContext());
             share.setScaleType(ImageView.ScaleType.CENTER_CROP);
             edit.setScaleType(ImageView.ScaleType.CENTER_CROP);
             flow.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            delete.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            setqs.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            rundebug.setScaleType(ImageView.ScaleType.CENTER_CROP);
             int size = Device.screenY(getContext()) / 11;
             LinearLayout.LayoutParams buttons = new LayoutParams(size, size);
             share.setBackground(null);
             edit.setBackground(null);
             flow.setBackground(null);
+            delete.setBackground(null);
+            setqs.setBackground(null);
+            rundebug.setBackground(null);
             share.setImageDrawable(getContext().getDrawable(R.drawable.ic_share));
             edit.setImageDrawable(getContext().getDrawable(R.drawable.ic_create));
             flow.setImageDrawable(getContext().getDrawable(R.drawable.ic_run));
+            delete.setImageDrawable(getContext().getDrawable(R.drawable.ic_delete));
+            setqs.setImageDrawable(getContext().getDrawable(R.drawable.ic_set_favorite));
+            rundebug.setImageDrawable(getContext().getDrawable(R.drawable.ic_bug));
             share.setLayoutParams(buttons);
             edit.setLayoutParams(buttons);
             flow.setLayoutParams(buttons);
+            delete.setLayoutParams(buttons);
+            setqs.setLayoutParams(buttons);
+            rundebug.setLayoutParams(buttons);
             bottomButtons.addView(edit);
+            bottomButtons.addView(delete);
             bottomButtons.addView(share);
+            bottomButtons.addView(setqs);
+            bottomButtons.addView(rundebug);
             bottomButtons.addView(flow);
             bottomButtons.setPadding(5, 5, 5, 5);
             bottomButtons.setBackground(generateCoaster(configuration.getValue(Configuration.textColor, 0xff000000)));
+            share.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Main.share(getContext(),configuration.getConfiguration(),"Share Configuration As JSON");
+                }
+            });
             flow.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1298,7 +1228,25 @@ public class Main extends Activity {
                 @Override
                 public void onClick(View v) {
                     if (onEdit != null)
-                        onEdit.onEdit(configuration.getValue(Configuration.name, null));
+                        onEdit.onPress(configuration.getValue(Configuration.name, null));
+                }
+            });
+            setqs.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if(onSetFavorite!=null)onSetFavorite.onPress(configuration.getValue(Configuration.name, null));
+                }
+            });
+            delete.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if(onRemove!=null)onRemove.onPress(configuration.getValue(Configuration.name, null));
+                }
+            });
+            rundebug.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if(onRunDebug!=null)onRunDebug.onPress(configuration.getValue(Configuration.name, null));
                 }
             });
             bottomButtons.setLayoutParams(new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, size + bottomButtons.getPaddingTop() + bottomButtons.getPaddingBottom()));
@@ -1317,32 +1265,43 @@ public class Main extends Activity {
             }
         }
 
-        public void setOnEdit(OnEdit onEdit) {
+        public void setOnEdit(OnPress onEdit) {
             this.onEdit = onEdit;
+        }
+
+        public void setOnRemove(OnPress onRemove) {
+            this.onRemove = onRemove;
+        }
+
+        public void setOnSetFavorite(OnPress onSet) {
+            this.onSetFavorite = onSet;
+        }
+        public void setOnRunDebug(OnPress onSet) {
+            this.onRunDebug = onSet;
         }
 
         private void initStageDBluetooth() {
             TextView deviceName = new TextView(getContext());
             TextView deviceMac = new TextView(getContext());
+            TextView dataType = new TextView(getContext());
             deviceName.setGravity(Gravity.CENTER);
             deviceName.setTextSize(20);
             deviceMac.setGravity(Gravity.CENTER);
             deviceMac.setTextSize(20);
+            dataType.setGravity(Gravity.CENTER);
+            dataType.setTextSize(20);
             deviceName.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
             deviceMac.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+            dataType.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
             String deviceNameText = "Device Name: " + configuration.getValue(Configuration.deviceName, "No Device");
             deviceName.setText(deviceNameText);
             String deviceMacText = "Device MAC: " + configuration.getValue(Configuration.deviceAddress, "No Mac");
             deviceMac.setText(deviceMacText);
+            String dataTypeText="Data-Type: "+configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).substring(0, 1).toUpperCase() + configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).substring(1);
+            dataType.setText(dataTypeText);
             left.addView(deviceName);
-            left.addView(deviceMac);
-            TextView data = new TextView(getContext());
-            data.setGravity(Gravity.CENTER);
-            data.setTextSize(25);
-            data.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
-            String dataText = "Data: \n" + configuration.getValue(Configuration.data, "No Data");
-            data.setText(dataText);
-            right.addView(data);
+            left.addView(dataType);
+            initStageEBluetooth();
         }
 
         private void initStageDInternet() {
@@ -1350,28 +1309,29 @@ public class Main extends Activity {
             url.setGravity(Gravity.CENTER);
             url.setTextSize(20);
             url.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
-            String urlText="Server: "+configuration.getValue(Configuration.urlBase,"No Base URL").replaceAll("https://","").replaceAll("http://","");
+            String urlText = "Server: " + configuration.getValue(Configuration.urlBase, "No Base URL").replaceAll("https://", "").replaceAll("http://", "");
             url.setText(urlText);
             TextView port = new TextView(getContext());
             port.setGravity(Gravity.CENTER);
             port.setTextSize(20);
             port.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
-            String portText="Port: "+configuration.getValue(Configuration.port,80);
+            String portText = "Port: " + configuration.getValue(Configuration.port, 80);
             port.setText(portText);
             TextView method = new TextView(getContext());
             method.setGravity(Gravity.CENTER);
             method.setTextSize(20);
             method.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
-            String methodText="Method: "+configuration.getValue(Configuration.method,Configuration.METHOD_INTERNET_GET).substring(0,1).toUpperCase()+configuration.getValue(Configuration.method,Configuration.METHOD_INTERNET_GET).substring(1);
+            String methodText = "Method: " + configuration.getValue(Configuration.method, Configuration.METHOD_INTERNET_GET).substring(0, 1).toUpperCase() + configuration.getValue(Configuration.method, Configuration.METHOD_INTERNET_GET).substring(1);
             method.setText(methodText);
             left.addView(url);
             left.addView(port);
             left.addView(method);
             initStageEInternet();
         }
-        private void initStageEInternet(){
+
+        private void initStageEInternet() {
             right.removeAllViews();
-            int size = right.getLayoutParams().width/2;
+            int size = right.getLayoutParams().width / 2;
             String[] titles = new String[]{"Name", "Value"};
             Table dataTable;
             try {
@@ -1382,6 +1342,38 @@ public class Main extends Activity {
             right.addView(dataTable);
             dataTable.setPadding(5, 5, 5, 5);
         }
+
+        private void initStageEBluetooth(){
+            right.removeAllViews();
+            if(configuration.getValue(Configuration.bluetoothEncoding,Configuration.ENCODING_BLUETOOTH_JSON).equals(Configuration.ENCODING_BLUETOOTH_JSON)){
+                int size = right.getLayoutParams().width / 2;
+                String[] titles = new String[]{"Name", "Value"};
+                Table dataTable;
+                try {
+                    dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]")), titles);
+                } catch (JSONException e) {
+                    dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(), titles);
+                }
+                right.addView(dataTable);
+                dataTable.setPadding(5, 5, 5, 5);
+            }else {
+                TextView dataTitle = new TextView(getContext());
+                dataTitle.setGravity(Gravity.CENTER);
+                dataTitle.setTextSize(25);
+                dataTitle.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+                TextView data = new TextView(getContext());
+                data.setGravity(Gravity.CENTER);
+                data.setTextSize(25);
+                data.setTextColor(configuration.getValue(Configuration.textColor, 0xff000000));
+                String dataTitleText = "Data:";
+                dataTitle.setText(dataTitleText);
+                data.setText(configuration.getValue(Configuration.data, "No Data"));
+                data.setTextIsSelectable(true);
+                right.addView(dataTitle);
+                right.addView(data);
+            }
+        }
+
         private Drawable generateCoaster(int color) {
             GradientDrawable gd = (GradientDrawable) getContext().getDrawable(R.drawable.rounded_rect);
             if (gd != null) {
@@ -1390,8 +1382,8 @@ public class Main extends Activity {
             return gd;
         }
 
-        public interface OnEdit {
-            void onEdit(String conf);
+        public interface OnPress {
+            void onPress(String conf);
         }
     }
 
@@ -1584,8 +1576,8 @@ public class Main extends Activity {
                     if (onChanged != null) onChanged.onChanged(currentData);
                 }
             });
-            if(mode==MODE_RW)
-            addView(addNew);
+            if (mode == MODE_RW)
+                addView(addNew);
         }
 
         private void addListElements(final LinearLayout list) {
@@ -1743,52 +1735,99 @@ public class Main extends Activity {
         public BluetoothSession(Action action, OnSessionEnd onSessionEnd) {
             this.action = action;
             this.onSessionEnd = onSessionEnd;
+            verbose("AsyncTask Initialized");
         }
 
         @Override
         protected Main.Status doInBackground(String... configurations) {
             Main.Status returnStatus = new Main.Status(Main.Status.STATUS_STARTING);
+            verbose("Starting Configuration");
             BluetoothAdapter blueAdapter;
             BluetoothManager manager = (BluetoothManager) action.c.getSystemService(Context.BLUETOOTH_SERVICE);
             SharedPreferences sp = action.c.getSharedPreferences(action.c.getPackageName(), Context.MODE_PRIVATE);
             Configuration configuration = new Configuration(sp.getString(action.config, "{}"));
+            String sending;
+            if (configuration.getValue(Configuration.bluetoothEncoding, Configuration.ENCODING_BLUETOOTH_JSON).equals(Configuration.ENCODING_BLUETOOTH_JSON)) {
+                verbose("Generating Text From JSON");
+                try {
+                    JSONArray jsonConfig = new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]"));
+                    JSONObject object = new JSONObject();
+                    for (int a = 0; a < jsonConfig.length(); a++) {
+                        JSONObject currentObject = jsonConfig.getJSONObject(a);
+                        if (currentObject.has("name") && currentObject.has("value")) {
+                            object.put(currentObject.getString("name"), currentObject.getString("value"));
+                        }
+                    }
+                    sending = object.toString();
+                    verbose("Generated Text From JSON");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    verbose("Failed Generating Text From JSON. Using Empty");
+                    sending = "";
+                }
+            } else {
+                verbose("Getting Saved Data");
+                sending = configuration.getValue(Configuration.data, "");
+            }
+            verbose("Text To Send: "+sending);
             if (manager != null) {
+                verbose("Bluetooth Permission Granted");
                 blueAdapter = manager.getAdapter();
                 if (blueAdapter.isEnabled()) {
+                    verbose("Bluetooth Is Enabled");
                     blueAdapter.cancelDiscovery();
                     if (!configuration.getValue(Configuration.deviceName, "").equals("") && !configuration.getValue(Configuration.deviceAddress, "").equals("")) {
+                        verbose("Device Name Found");
                         final BluetoothDevice device = blueAdapter.getRemoteDevice(configuration.getValue(Configuration.deviceAddress, ""));
                         UUID uuid = device.getUuids()[0].getUuid();
+                        verbose("Device UUID: "+uuid.toString());
                         try {
+                            verbose("Trying To Create Socket");
                             final BluetoothSocket socket = device.createRfcommSocketToServiceRecord(uuid);
                             returnStatus.status = Main.Status.STATUS_IN_PROGRESS;
+                            verbose("Socket Created");
                             try {
+                                verbose("Connecting To Socket");
                                 socket.connect();
                                 while (!socket.isConnected())
                                     returnStatus.status = Main.Status.STATUS_IN_PROGRESS;
+                                verbose("Connected To Socket");
                                 if (socket.isConnected()) {
-                                    socket.getOutputStream().write(configuration.getValue(Configuration.data, "").getBytes());
+                                    verbose("Sending Data Via Socket");
+                                    socket.getOutputStream().write(sending.getBytes());
+                                    verbose("Data Sent");
                                     try {
+                                        verbose("Trying To Close Output Stream And Socket");
                                         socket.getOutputStream().flush();
                                         socket.getOutputStream().close();
                                         socket.close();
+                                        verbose("Socket And Output Stream Closed");
                                     } catch (IOException ignored) {
+                                        verbose("Failed Closing Socket");
                                     }
                                     returnStatus.status = Main.Status.STATUS_SUCCEDED;
+                                    verbose("Operation Successful");
                                 } else {
                                     returnStatus.status = Main.Status.STATUS_FAILED;
+                                    verbose("Could Not Connect Socket, Operation Failed");
                                 }
                             } catch (IOException e) {
+                                verbose("Operation Could Not Be Completed, Socket Closed");
                                 returnStatus.status = Main.Status.STATUS_FAILED;
                             }
                         } catch (IOException e) {
+                            verbose("Operation Failed, Could Not Create Socket");
                             returnStatus.status = Main.Status.STATUS_FAILED;
                         }
                     }
                 } else {
+                    verbose("Operation Could Not Begin, Bluetooth Is Off");
                     returnStatus.status = Main.Status.STATUS_FAILED;
                 }
+            }else{
+                verbose("Bluetooth Permission Not Granted");
             }
+            verbose("Done");
             return returnStatus;
         }
 
@@ -1796,6 +1835,10 @@ public class Main extends Activity {
         protected void onPostExecute(Main.Status status) {
             super.onPostExecute(status);
             if (onSessionEnd != null) onSessionEnd.onSessionEnd(status);
+        }
+
+        private void verbose(String s){
+            if(action.verboser!=null)action.verboser.send(s);
         }
 
         public interface OnSessionEnd {

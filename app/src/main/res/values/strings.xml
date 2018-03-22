@@ -4,4 +4,8 @@
     <string name="execute">Execute Configuration</string>
     <string name="new_configuration_short">New…</string>
     <string name="display_results">Display Result</string>
+    <string name="text_post">(HTTP[/S]) Post</string>
+    <string name="text_get">(HTTP[/S]) Get</string>
+    <string name="type_text">Text</string>
+    <string name="type_json">JSON</string>
 </resources>
