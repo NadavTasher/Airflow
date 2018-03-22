@@ -1,6 +1,5 @@
 package nadav.tasher.airflow;
 
-import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
@@ -14,7 +13,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -25,13 +23,11 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.graphics.drawable.shapes.RoundRectShape;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -363,20 +359,7 @@ public class Main extends Activity {
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        initStageAB();
-    }
-
-    private void initStageAB() {
-        if (Build.VERSION.SDK_INT >= 23) {
-            int permissionCheck = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                initStageB();
-            } else {
-                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 304);
-            }
-        } else {
-            initStageB();
-        }
+        initStageB();
     }
 
     private void remakeTaskDescription(int color) {
@@ -414,7 +397,6 @@ public class Main extends Activity {
             if (input.has(importExportConfigurations) && input.has(importExportIndex)) {
                 JSONArray index = input.getJSONArray(importExportIndex);
                 JSONObject configurations = input.getJSONObject(importExportConfigurations);
-                Log.i("indez", index.toString());
                 for (int c = 0; c < index.length(); c++) {
                     String originalName = index.getString(c);
                     String name = index.getString(c);
@@ -425,7 +407,6 @@ public class Main extends Activity {
                         }
                     }
                     JSONObject config = new JSONObject(configurations.getString(originalName));
-                    Log.i("indez", config.toString());
                     Configuration configuration = new Configuration(config.toString());
                     configuration.setValue(Configuration.name, name);
                     addConfigurationToList(getApplicationContext(), configuration.getValue(Configuration.type, Configuration.TYPE_BLUETOOTH), name);
@@ -434,7 +415,6 @@ public class Main extends Activity {
                 }
             }
         } catch (JSONException ignored) {
-            ignored.printStackTrace();
         }
     }
 
@@ -562,20 +542,6 @@ public class Main extends Activity {
         }
         for (int c = confs.size() - 1; c >= 0; c--) {
             addToListView(new Configuration(sp.getString(confs.get(c), "{}")));
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
-        switch (requestCode) {
-            case 304: {
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    initStageB();
-                } else {
-                    initStageAB();
-                }
-                break;
-            }
         }
     }
 
@@ -865,9 +831,9 @@ public class Main extends Activity {
             String[] titles = new String[]{"Name", "Value"};
             Table bluetoothJsonTableCreate;
             try {
-                bluetoothJsonTableCreate = new Table(this, size, Table.MODE_RW, new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]")), titles);
+                bluetoothJsonTableCreate = new Table(this, Color.WHITE, size, Table.MODE_RW, new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]")), titles);
             } catch (JSONException e) {
-                bluetoothJsonTableCreate = new Table(this, size, Table.MODE_RW, new JSONArray(), titles);
+                bluetoothJsonTableCreate = new Table(this, Color.WHITE, size, Table.MODE_RW, new JSONArray(), titles);
             }
             final Table bluetoothJsonTable = bluetoothJsonTableCreate;
             bluetoothJsonTable.setPadding(15, 15, 15, 15);
@@ -1011,7 +977,7 @@ public class Main extends Activity {
             all.addView(getText("Base URL:"));
             all.addView(urlBaseText);
             portText.setHint("e.g. 80");
-            portText.setText(configuration.getValue(Configuration.port, ""));
+            portText.setText(String.valueOf(configuration.getValue(Configuration.port, 80)));
             portText.setInputType(InputType.TYPE_CLASS_NUMBER);
             portText.addTextChangedListener(new TextWatcher() {
                 @Override
@@ -1082,9 +1048,9 @@ public class Main extends Activity {
             String[] titles = new String[]{"Name", "Value"};
             Table dataTable;
             try {
-                dataTable = new Table(this, size, Table.MODE_RW, new JSONArray(configuration.getValue(Configuration.requestParameters, "[]")), titles);
+                dataTable = new Table(this, Color.WHITE, size, Table.MODE_RW, new JSONArray(configuration.getValue(Configuration.requestParameters, "[]")), titles);
             } catch (JSONException e) {
-                dataTable = new Table(this, size, Table.MODE_RW, new JSONArray(), titles);
+                dataTable = new Table(this, Color.WHITE, size, Table.MODE_RW, new JSONArray(), titles);
             }
             dataTable.setShowRemoveButton(true, size / 4);
             all.addView(getText("Request Parameters:"));
@@ -1548,9 +1514,9 @@ public class Main extends Activity {
             String[] titles = new String[]{"Name", "Value"};
             Table dataTable;
             try {
-                dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(configuration.getValue(Configuration.requestParameters, "[]")), titles);
+                dataTable = new Table(getContext(), configuration.getValue(Configuration.textColor, Color.BLACK), size, Table.MODE_RO, new JSONArray(configuration.getValue(Configuration.requestParameters, "[]")), titles);
             } catch (JSONException e) {
-                dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(), titles);
+                dataTable = new Table(getContext(), configuration.getValue(Configuration.textColor, Color.BLACK), size, Table.MODE_RO, new JSONArray(), titles);
             }
             right.addView(dataTable);
             dataTable.setPadding(5, 5, 5, 5);
@@ -1563,9 +1529,9 @@ public class Main extends Activity {
                 String[] titles = new String[]{"Name", "Value"};
                 Table dataTable;
                 try {
-                    dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]")), titles);
+                    dataTable = new Table(getContext(), configuration.getValue(Configuration.textColor, Color.BLACK), size, Table.MODE_RO, new JSONArray(configuration.getValue(Configuration.bluetoothJSONParameters, "[]")), titles);
                 } catch (JSONException e) {
-                    dataTable = new Table(getContext(), size, Table.MODE_RO, new JSONArray(), titles);
+                    dataTable = new Table(getContext(), configuration.getValue(Configuration.textColor, Color.BLACK), size, Table.MODE_RO, new JSONArray(), titles);
                 }
                 right.addView(dataTable);
                 dataTable.setPadding(5, 5, 5, 5);
@@ -1737,7 +1703,7 @@ public class Main extends Activity {
         static final int MODE_VO = 2;
         JSONArray currentData;
         String[] titles;
-        int mode, size;
+        int mode, size, textcolor;
         OnChanged onChanged;
         int removeButtonSize;
         boolean removeButton = false;
@@ -1746,11 +1712,12 @@ public class Main extends Activity {
             super(context);
         }
 
-        public Table(Context context, int size, int mode, JSONArray currentData, String[] titles) {
+        public Table(Context context, int textcolor, int size, int mode, JSONArray currentData, String[] titles) {
             super(context);
             this.currentData = currentData;
             this.mode = mode;
             this.size = size;
+            this.textcolor = textcolor;
             this.titles = titles;
             init();
         }
@@ -1769,7 +1736,7 @@ public class Main extends Activity {
             removeAllViews();
             setOrientation(VERTICAL);
             setGravity(Gravity.CENTER);
-            TableRow title = new TableRow(getContext(), size, MODE_VO, titles, titles);
+            TableRow title = new TableRow(getContext(), textcolor, size, MODE_VO, titles, titles);
             addView(title);
             ScrollView rowScroll = new ScrollView(getContext());
             final LinearLayout rows = new LinearLayout(getContext());
@@ -1808,7 +1775,7 @@ public class Main extends Activity {
                     e.printStackTrace();
                 }
                 final int finalT = t;
-                final TableRow row = new TableRow(getContext(), size, mode, current, titles);
+                final TableRow row = new TableRow(getContext(), textcolor, size, mode, current, titles);
                 if (removeButton) {
                     row.showRemoveButton(new OnClickListener() {
                         @Override
@@ -1845,6 +1812,7 @@ public class Main extends Activity {
         static class TableRow extends LinearLayout {
             int mode;
             int size;
+            int textcolor;
             String[] currentValues;
             String[] hints;
             OnChanged onChanged;
@@ -1854,12 +1822,13 @@ public class Main extends Activity {
                 super(context);
             }
 
-            public TableRow(Context context, int size, int mode, String[] values, String[] hints) {
+            public TableRow(Context context, int textcolor, int size, int mode, String[] values, String[] hints) {
                 super(context);
                 this.mode = mode;
                 currentValues = values;
                 this.hints = hints;
                 this.size = size;
+                this.textcolor = textcolor;
                 init();
             }
 
@@ -1898,6 +1867,7 @@ public class Main extends Activity {
                     } else {
                         ctv = new EditText(getContext());
                     }
+                    ctv.setTextColor(textcolor);
                     if (hints.length == currentValues.length) {
                         ctv.setHint(hints[i]);
                     }

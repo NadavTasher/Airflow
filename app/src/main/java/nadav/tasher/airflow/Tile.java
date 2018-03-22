@@ -10,13 +10,14 @@ import nadav.tasher.lightool.Tunnel;
 
 @TargetApi(Build.VERSION_CODES.N)
 public class Tile extends TileService {
+    Main.Configuration configuration;
     Tunnel.OnTunnel<String> mTunnelReceiver = new Tunnel.OnTunnel<String>() {
         @Override
         public void onReceive(String s) {
             updateTile(s);
         }
     };
-    Main.Configuration configuration;
+
     private void updateTile(String s) {
         SharedPreferences sp = getSharedPreferences(getPackageName(), MODE_PRIVATE);
         String wid = sp.getString(Main.qs, null);
@@ -33,7 +34,7 @@ public class Tile extends TileService {
     @Override
     public void onClick() {
         super.onClick();
-        Main.activateTunnel.send(new Main.Action(getApplicationContext(),configuration.getValue(Main.Configuration.name,"")));
+        Main.activateTunnel.send(new Main.Action(getApplicationContext(), configuration.getValue(Main.Configuration.name, "")));
     }
 
     @Override
