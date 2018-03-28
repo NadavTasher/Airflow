@@ -28,6 +28,7 @@ import android.os.Handler;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -85,22 +86,33 @@ public class Main extends Activity {
         bluetoothTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
             @Override
             public void onReceive(final Action action) {
-                BluetoothSession session = new BluetoothSession(action, new BluetoothSession.OnSessionEnd() {
-                    @Override
-                    public void onSessionEnd(Status result) {
-                        statusTunnel.send(result);
-                        if (result.status == Status.STATUS_SUCCEDED) {
-                            Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
-                        } else if (result.status == Status.STATUS_FAILED) {
-                            Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
-                        } else if (result.status == Status.STATUS_IN_PROGRESS) {
-                            Toast.makeText(action.c, "Not Finished.", Toast.LENGTH_LONG).show();
-                        } else if (result.status == Status.STATUS_STARTING) {
-                            Toast.makeText(action.c, "Failed To Start.", Toast.LENGTH_LONG).show();
-                        }
+                BluetoothManager manager = (BluetoothManager) action.c.getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter bluetoothAdapter;
+                if (manager != null) {
+                    bluetoothAdapter = manager.getAdapter();
+                    if (bluetoothAdapter.isEnabled()) {
+                        BluetoothSession session = new BluetoothSession(action, new BluetoothSession.OnSessionEnd() {
+                            @Override
+                            public void onSessionEnd(Status result) {
+                                statusTunnel.send(result);
+                                if (result.status == Status.STATUS_SUCCEDED) {
+                                    Toast.makeText(action.c, "Sent.", Toast.LENGTH_LONG).show();
+                                } else if (result.status == Status.STATUS_FAILED) {
+                                    Toast.makeText(action.c, "Failed.", Toast.LENGTH_LONG).show();
+                                } else if (result.status == Status.STATUS_IN_PROGRESS) {
+                                    Toast.makeText(action.c, "Not Finished.", Toast.LENGTH_LONG).show();
+                                } else if (result.status == Status.STATUS_STARTING) {
+                                    Toast.makeText(action.c, "Failed To Start.", Toast.LENGTH_LONG).show();
+                                }
+                            }
+                        });
+                        session.execute();
+                    }else{
+                        Toast.makeText(action.c, "Bluetooth Is Off", Toast.LENGTH_LONG).show();
                     }
-                });
-                session.execute();
+                }else{
+                    Toast.makeText(action.c, "Device Does Not Support Bluetooth / App Isn't Granted Bluetooth Permission.", Toast.LENGTH_LONG).show();
+                }
             }
         });
         internetTunnel.addReceiver(new Tunnel.OnTunnel<Action>() {
@@ -1359,7 +1371,7 @@ public class Main extends Activity {
             delete.setScaleType(ImageView.ScaleType.CENTER_CROP);
             setqs.setScaleType(ImageView.ScaleType.CENTER_CROP);
             rundebug.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            int size = Device.screenY(getContext()) / 11;
+            int size = (int) (Device.screenX(getContext()) *0.15);
             LinearLayout.LayoutParams buttons = new LayoutParams(size, size);
             share.setBackground(null);
             edit.setBackground(null);
